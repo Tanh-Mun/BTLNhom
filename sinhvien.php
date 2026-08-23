@@ -5,13 +5,13 @@ session_start();
 if (!isset($_SESSION['feedbacks'])) {
     $_SESSION['feedbacks'] = [
         [
-            'lecturer_name' => 'TS. Trần Tuấn Anh',
+            'lecturer_name' => 'Nguyễn Hoàng Nam',
             'rating'        => 5,
             'comment'       => 'Thầy tư vấn đồ án rất nhiệt tình và chi tiết.',
             'created_at'    => '2026-08-10 14:30'
         ],
         [
-            'lecturer_name' => 'ThS. Nguyễn Thu Quỳnh',
+            'lecturer_name' => 'Nguyễn Thị Lan',
             'rating'        => 4,
             'comment'       => 'Buổi tư vấn tạm ổn, giải đáp đúng trọng tâm.',
             'created_at'    => '2026-08-12 09:15'
@@ -63,7 +63,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $old['comment']       = $comment;
 
     // Validate Tên giảng viên
-    $allowed_lecturers = ['TS. Trần Tuấn Anh', 'ThS. Nguyễn Thu Quỳnh', 'Trịnh Quang Vinh'];
+    $allowed_lecturers = [
+        'Nguyễn Hoàng Nam',
+        'Nguyễn Thị Lan',
+        'Trần Thị Hương',
+        'Lê Minh Anh',
+        'Phạm Thu Hà'];
     if (empty($lecturer_name)) {
         $errors['lecturer_name'] = "Vui lòng chọn tên Giảng viên!";
     } elseif (!in_array($lecturer_name, $allowed_lecturers)) {
@@ -246,9 +251,11 @@ if (isset($_SESSION['success_message'])) {
                         <label for="lecturer_name" class="form-label">1. Tên Giảng viên <span class="text-required">*</span></label>
                         <select name="lecturer_name" id="lecturer_name" class="form-control <?= isset($errors['lecturer_name']) ? 'is-invalid' : '' ?>">
                             <option value="">-- Chọn Giảng viên --</option>
-                            <option value="TS. Trần Tuấn Anh" <?= $old['lecturer_name'] === 'TS. Trần Tuấn Anh' ? 'selected' : '' ?>>TS. Trần Tuấn Anh</option>
-                            <option value="ThS. Nguyễn Thu Quỳnh" <?= $old['lecturer_name'] === 'ThS. Nguyễn Thu Quỳnh' ? 'selected' : '' ?>>ThS. Nguyễn Thu Quỳnh</option>
-                            <option value="Trịnh Quang Vinh" <?= $old['lecturer_name'] === 'Trịnh Quang Vinh' ? 'selected' : '' ?>>Trịnh Quang Vinh</option>
+                            <option value="Nguyễn Hoàng Nam" <?= $old['lecturer_name'] === 'Nguyễn Hoàng Nam' ? 'selected' : '' ?>>Nguyễn Hoàng Nam</option>
+                            <option value="Nguyễn Thị Lan" <?= $old['lecturer_name'] === 'Nguyễn Thị Lan' ? 'selected' : '' ?>>Nguyễn Thị Lan</option>
+                            <option value="Trần Thị Hương" <?= $old['lecturer_name'] === 'Trần Thị Hương' ? 'selected' : '' ?>>Trần Thị Hương</option>
+                            <option value="Lê Minh Anh" <?= $old['lecturer_name'] === 'Lê Minh Anh' ? 'selected' : '' ?>>Lê Minh Anh</option>
+                            <option value="Phạm Thu Hà" <?= $old['lecturer_name'] === 'Phạm Thu Hà' ? 'selected' : '' ?>>Phạm Thu Hà</option>
                         </select>
                         <?php if (isset($errors['lecturer_name'])): ?>
                             <span class="error-text"><i class="fa-solid fa-circle-exclamation"></i> <?= $errors['lecturer_name'] ?></span>
