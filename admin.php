@@ -5,14 +5,14 @@ session_start();
 if (!isset($_SESSION['feedbacks'])) {
     $_SESSION['feedbacks'] = [
         [
-            'lecturer_name' => 'TS. Trần Tuấn Anh',
+            'lecturer_name' => 'Nguyễn Hoàng Nam',
             'rating'        => 5,
             'comment'       => 'Thầy tư vấn đồ án rất nhiệt tình và chi tiết.',
             'created_at'    => '2026-08-10 14:30',
             'reply'         => 'Cảm ơn em, chúc em hoàn thành tốt đồ án!'
         ],
         [
-            'lecturer_name' => 'ThS. Nguyễn Thu Quỳnh',
+            'lecturer_name' => 'Nguyễn Thị Lan',
             'rating'        => 4,
             'comment'       => 'Buổi tư vấn tạm ổn, giải đáp đúng trọng tâm.',
             'created_at'    => '2026-08-12 09:15',
@@ -274,9 +274,11 @@ $response_rate = $total_feedbacks > 0 ? round(($has_reply_count / $total_feedbac
                     <form method="GET" action="" class="filter-form">
                         <select name="filter_lecturer" class="form-control <?= isset($errors['filter']) ? 'is-invalid' : '' ?>">
                             <option value="all">-- Lọc theo Giảng viên --</option>
-                            <option value="TS. Trần Tuấn Anh" <?= $filter_lecturer === 'TS. Trần Tuấn Anh' ? 'selected' : '' ?>>TS. Trần Tuấn Anh</option>
-                            <option value="ThS. Nguyễn Thu Quỳnh" <?= $filter_lecturer === 'ThS. Nguyễn Thu Quỳnh' ? 'selected' : '' ?>>ThS. Nguyễn Thu Quỳnh</option>
-                            <option value="Trịnh Quang Vinh" <?= $filter_lecturer === 'Trịnh Quang Vinh' ? 'selected' : '' ?>>Trịnh Quang Vinh</option>
+                            <option value="Nguyễn Hoàng Nam" <?= $filter_lecturer === 'Nguyễn Hoàng Nam' ? 'selected' : '' ?>>Nguyễn Hoàng Nam</option>
+                            <option value="Nguyễn Thị Lan" <?= $filter_lecturer === 'Nguyễn Thị Lan' ? 'selected' : '' ?>>Nguyễn Thị Lan</option>
+                            <option value="Trần Thị Hương" <?= $filter_lecturer === 'Trần Thị Hương' ? 'selected' : '' ?>>Trần Thị Hương</option>
+                            <option value="Lê Minh Anh" <?= $filter_lecturer === 'Lê Minh Anh' ? 'selected' : '' ?>>Lê Minh Anh</option>
+                            <option value="Phạm Thu Hà" <?= $filter_lecturer === 'Phạm Thu Hà' ? 'selected' : '' ?>>Phạm Thu Hà</option>
                         </select>
 
                         <select name="filter_rating" class="form-control <?= isset($errors['filter']) ? 'is-invalid' : '' ?>">
