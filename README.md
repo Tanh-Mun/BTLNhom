@@ -80,3 +80,75 @@ Mô tả: Lưu đánh giá và phản hồi của sinh viên sau khi cuộc hẹ
    GET /?action=complete&id=X: Chuyển trạng thái sang completed.
 
    Chuyển hướng (PRG Pattern): Sử dụng header("Location: ...") sau khi thực hiện action để tránh trùng lặp dữ liệu khi người dùng ấn F5.
+
+ 7. 🗄️ Cơ Sở Dữ Liệu (Database)
+
+Hệ thống sử dụng cơ sở dữ liệu **Microsoft SQL Server** với tên CSDL là appointment_system. 
+
+ - 1. Mô tả chi tiết các bảng (Database Schema)
+
+Hệ thống bao gồm 8 bảng chính để quản lý người dùng, lịch hẹn và đánh giá:
+
+  * roles: Quản lý vai trò người dùng (VD: Sinh viên, Giảng viên, Admin).
+  * id (PK, INT, IDENTITY): Mã vai trò.
+  * name (NVARCHAR(50), UNIQUE): Tên vai trò.
+
+  *users: Quản lý thông tin tài khoản người dùng trong hệ thống.
+  * id (PK, INT, IDENTITY): Mã người dùng.
+  * username (VARCHAR(50), UNIQUE): Tên đăng nhập.
+  * password (VARCHAR(255)): Mật khẩu đã mã hóa.
+  * full_name (NVARCHAR(100)): Họ và tên.
+  * email (VARCHAR(100), UNIQUE): Địa chỉ email.
+  * role_id (FK): Khóa ngoại liên kết với bảng roles.
+  * created_at (DATETIME): Thời gian tạo tài khoản (mặc định: thời gian hiện tại).
+
+  *lecturer_profiles: Thông tin hồ sơ chi tiết của Giảng viên.
+  * user_id (PK, FK): Mã giảng viên (liên kết với users.id, xóa tự động theo CASCADE).
+  * department (NVARCHAR(100)): Khoa/Bộ môn.
+  * bio (NVARCHAR(MAX)): Tiểu sử / Giới thiệu bản thân.
+
+  *specialties: Danh mục chuyên môn/lĩnh vực tư vấn của Giảng viên.
+  * id (PK, INT, IDENTITY): Mã chuyên môn.
+  * name (NVARCHAR(100), UNIQUE): Tên chuyên môn/lĩnh vực.
+
+  * lecturer_specialties: Bảng trung gian thể hiện quan hệ nhiều - nhiều giữa Giảng viên và Chuyên môn.
+  * lecturer_id (PK, FK): Mã giảng viên (liên kết users.id).
+  * specialty_id (PK, FK): Mã chuyên môn (liên kết specialties.id, xóa tự động theo CASCADE).
+
+  *slots: Quản lý các khung giờ rảnh mà Giảng viên mở để sinh viên đăng ký.
+  * id (PK, INT, IDENTITY): Mã khung giờ.
+  * lecturer_id (FK): Mã giảng viên tạo slot (liên kết users.id, xóa tự động theo CASCADE).
+  * start_time (DATETIME): Thời gian bắt đầu.
+  * end_time (DATETIME): Thời gian kết thúc.
+  * status (VARCHAR(20)): Trạng thái slot (available, booked - Mặc định: available).
+
+  *appointments: Quản lý các cuộc hẹn do Sinh viên đặt.
+  * id (PK, INT, IDENTITY): Mã cuộc hẹn.
+  * slot_id (FK): Mã khung giờ (liên kết slots.id).
+  * student_id` (FK): Mã sinh viên đặt lịch (liên kết users.id).
+  * topic (NVARCHAR(MAX)): Chủ đề/Nội dung trao đổi.
+  * status (VARCHAR(20)): Trạng thái lịch hẹn (pending, approved, rejected, completed, cancelled - Mặc định: pending).
+  * created_at (DATETIME): Thời gian tạo lịch hẹn.
+  * Ràng buộc: Ràng buộc UNIQUE unique_active_slot trên (slot_id, status).
+
+  *feedbacks`**: Quản lý phản hồi/đánh giá của Sinh viên sau cuộc hẹn.
+  * id (PK, INT, IDENTITY): Mã phản hồi.
+  * appointment_id (FK, UNIQUE): Mã cuộc hẹn (liên kết appointments.id, mỗi cuộc hẹn chỉ có 1 phản hồi, xóa tự động theo CASCADE).
+  * rating (TINYINT): Điểm đánh giá (từ 1 đến 5).
+  * comment (NVARCHAR(MAX)): Nhận xét/Góp ý.
+  * created_at (DATETIME): Thời gian tạo đánh giá.
+
+- 2. Sơ đồ Quan hệ Thực thể (ERD)
+
+![Sơ đồ ERD](./docs/erd-diagram.png) *(Thay đổi đường dẫn tới ảnh ERD của bạn)*
+
+mermaid
+erDiagram
+    roles ||--o{ users : "role_id"
+    users ||--o| lecturer_profiles : "user_id"
+    users ||--o{ lecturer_specialties : "lecturer_id"
+    specialties ||--o{ lecturer_specialties : "specialty_id"
+    users ||--o{ slots : "lecturer_id"
+    users ||--o{ appointments : "student_id"
+    slots ||--o{ appointments : "slot_id"
+    appointments ||--o| feedbacks : "appointment_id"
