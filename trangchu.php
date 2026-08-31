@@ -1,7 +1,5 @@
 <?php
 session_start();
-$isLoggedIn = isset($_SESSION['user']); 
-$userName = $isLoggedIn ? $_SESSION['user']['name'] : '';
 
 function renderStars($rating, $maxStars = 5) {
     echo '<div class="star-rating">';
@@ -127,7 +125,7 @@ function renderStars($rating, $maxStars = 5) {
             display: inline-block;
         }
 
-        /* Thống kê - Đã sửa định dạng hiển thị */
+        /* Thống kê */
         .stats-grid {
             display: grid !important;
             grid-template-columns: repeat(4, 1fr) !important;
@@ -336,13 +334,8 @@ function renderStars($rating, $maxStars = 5) {
             </div>
         </div>
         <div class="header-auth">
-            <?php if ($isLoggedIn): ?>
-                <span>Xin chào, <strong><?php echo htmlspecialchars($userName); ?></strong></span>
-                <a href="logout.php" class="auth-btn register">Đăng xuất</a>
-            <?php else: ?>
-                <a href="dangnhap.php" class="auth-btn">Đăng nhập</a>
-                <a href="dangky.php" class="auth-btn register">Đăng ký</a>
-            <?php endif; ?>
+            <a href="dangnhap.php" class="auth-btn">Đăng nhập</a>
+            <a href="dangky.php" class="auth-btn register">Đăng ký</a>
         </div>
     </header>
 
@@ -352,7 +345,7 @@ function renderStars($rating, $maxStars = 5) {
             <small style="text-transform: uppercase; letter-spacing: 1px;">Hệ thống đặt lịch tư vấn giảng viên</small>
             <h1>Kết nối với giảng viên ngoại ngữ<br>chỉ trong vài giây</h1>
             <p>Tìm giảng viên theo ngôn ngữ và chủ đề tư vấn, xem khung giờ còn trống theo thời gian thực và gửi yêu cầu đặt lịch — tất cả trong một nơi.</p>
-            <a href="#search" class="btn-primary">Tìm giảng viên & đặt lịch</a>
+            <a href="timvadatlich.php" class="btn-primary">Tìm giảng viên & đặt lịch</a>
         </section>
 
         <!-- Thống kê -->
