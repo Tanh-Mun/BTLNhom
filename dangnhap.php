@@ -40,7 +40,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'phone'    => $_SESSION['user']['phone'] ?? '0987654321',
                 'role'     => 'student'
             ];
-            header('Location: trangchu.php');
+            header('Location: timvadatlich.php');
             exit;
         }
 
