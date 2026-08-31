@@ -28,7 +28,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'email'    => 'vy.nguyen@lingua.edu',
                 'role'     => 'lecturer'
             ];
-            header('Location: Hoso.php');
+            header('Location: Cuochen.php');
             exit;
         } 
         // 3. Mặc định là tài khoản Sinh viên
