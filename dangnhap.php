@@ -17,7 +17,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'email'    => 'admin@edulingo.edu.vn',
                 'role'     => 'admin'
             ];
-            header('Location: gv-admin.php');
+            header('Location: tk-admin.php');
             exit;
         } 
         // 2. Kiểm tra tài khoản Giảng viên (Demo)

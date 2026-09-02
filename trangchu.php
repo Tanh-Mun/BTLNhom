@@ -345,7 +345,7 @@ function renderStars($rating, $maxStars = 5) {
             <small style="text-transform: uppercase; letter-spacing: 1px;">Hệ thống đặt lịch tư vấn giảng viên</small>
             <h1>Kết nối với giảng viên ngoại ngữ<br>chỉ trong vài giây</h1>
             <p>Tìm giảng viên theo ngôn ngữ và chủ đề tư vấn, xem khung giờ còn trống theo thời gian thực và gửi yêu cầu đặt lịch — tất cả trong một nơi.</p>
-            <a href="#search" class="btn-primary">Tìm giảng viên & đặt lịch</a>
+            <a href="timvadatlich.php" class="btn-primary">Tìm giảng viên & đặt lịch</a>
         </section>
 
         <!-- Thống kê -->
