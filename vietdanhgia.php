@@ -4,6 +4,22 @@ require_once 'db.php';
 
 if (!isset($pdo) && isset($conn)) { $pdo = $conn; }
 
+// 1. Kiểm tra session đăng nhập
+if (!isset($_SESSION['user']['id']) && !isset($_SESSION['user_id'])) {
+    header('Location: dangnhap.php');
+    exit;
+}
+
+$student_id = $_SESSION['user']['id'] ?? $_SESSION['user_id'];
+
+// 2. Lấy thông tin người dùng từ DB
+$stmtUser = $pdo->prepare("SELECT fullname FROM users WHERE id = ?");
+$stmtUser->execute([$student_id]);
+$currentUser = $stmtUser->fetch();
+
+$student_name = !empty($currentUser['fullname']) ? $currentUser['fullname'] : ($_SESSION['user_name'] ?? 'Học viên');
+$avatar_letter = mb_strtoupper(mb_substr($student_name, 0, 1, 'UTF-8'), 'UTF-8');
+
 $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 $teacher_name = "Giảng viên";
 $teacher_email = "teacher@edu.vn";
@@ -50,13 +66,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Viết Đánh Giá</title>
+    <title>Viết Đánh Giá - EDULINGO</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         :root {
             --primary-color: #d81b60;
             --primary-light: #fdf2f5;
-            --border-color: #fce4ec;
+            --border-color: #f8bbd0;
             --text-color: #333;
         }
 
@@ -64,83 +80,82 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             box-sizing: border-box;
             margin: 0;
             padding: 0;
-            font-family: Arial, sans-serif;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         }
 
         body {
             background-color: var(--primary-light);
             color: var(--text-color);
             min-height: 100vh;
-        }
-
-        .header-bar {
-            background-color: var(--primary-color);
-            color: white;
-            padding: 12px 30px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .logo-section {
-            display: flex;
-            align-items: center;
-            gap: 15px;
-        }
-
-        .logo-box {
-            background-color: white;
-            color: var(--primary-color);
-            font-weight: bold;
-            padding: 6px 12px;
-            border-radius: 6px;
-            font-size: 18px;
-        }
-
-        .brand-info {
             display: flex;
             flex-direction: column;
         }
 
-        .brand-name {
-            font-weight: bold;
-            font-size: 16px;
-            letter-spacing: 0.5px;
+        /* HEADER UI (KHÔNG MENU XỔ XUỐNG) */
+        .header { 
+            background-color: var(--primary-color); 
+            color: white; 
+            padding: 15px 40px; 
+            display: flex; 
+            align-items: center; 
+            justify-content: space-between; 
+        }
+        .header-brand { 
+            display: flex; 
+            align-items: center; 
+            gap: 15px; 
+        }
+        .logo-box { 
+            background: white; 
+            color: var(--primary-color); 
+            font-weight: bold; 
+            padding: 8px 12px; 
+            border-radius: 6px; 
+            font-size: 14px; 
+        }
+        .header-text h2 { 
+            font-size: 18px; 
+            text-transform: uppercase; 
+            letter-spacing: 1px; 
+        }
+        .header-text p { 
+            font-size: 13px; 
+            opacity: 0.9; 
         }
 
-        .brand-sub {
-            font-size: 11px;
-            opacity: 0.9;
+        .user-profile-icon { 
+            display: flex; 
+            align-items: center; 
+            gap: 10px; 
+            color: white; 
+            background-color: rgba(255, 255, 255, 0.15); 
+            padding: 6px 14px 6px 8px; 
+            border-radius: 25px; 
+            border: 1px solid rgba(255, 255, 255, 0.3); 
+            font-size: 14px; 
+            font-weight: 600; 
+            user-select: none; 
+        }
+        .avatar-circle { 
+            width: 34px; 
+            height: 34px; 
+            background-color: white; 
+            color: var(--primary-color); 
+            border-radius: 50%; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            font-weight: bold; 
+            font-size: 15px; 
         }
 
-        .user-pill {
-            background-color: white;
-            color: var(--primary-color);
-            padding: 6px 16px;
-            border-radius: 20px;
-            font-size: 13px;
-            font-weight: bold;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .user-avatar {
-            background-color: var(--primary-color);
-            color: white;
-            width: 22px;
-            height: 22px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 11px;
-        }
-
+        /* MAIN CONTENT */
         .main-container {
             max-width: 900px;
             margin: 40px auto;
             padding: 0 20px;
+            flex: 1;
+            width: 100%;
         }
 
         .review-card {
@@ -244,20 +259,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 </head>
 <body>
 
-    <div class="header-bar">
-        <div class="logo-section">
+    <!-- HEADER (KHÔNG DROPDOWN) -->
+    <div class="header">
+        <div class="header-brand">
             <div class="logo-box">ABC</div>
-            <div class="brand-info">
-                <span class="brand-name">EDULINGO</span>
-                <span class="brand-sub">Hệ thống đặt lịch tư vấn giảng viên</span>
+            <div class="header-text">
+                <h2>EDULINGO</h2>
+                <p>Hệ thống đặt lịch tư vấn giảng viên</p>
             </div>
         </div>
-        <div class="user-pill">
-            <span class="user-avatar">V</span>
-            <span>Học viên</span>
+        <div class="user-profile-icon">
+            <div class="avatar-circle"><?= htmlspecialchars($avatar_letter) ?></div>
+            <span class="user-name"><?= htmlspecialchars($student_name) ?></span>
         </div>
     </div>
 
+    <!-- MAIN CONTENT -->
     <div class="main-container">
         <form method="POST" class="review-card">
             <div class="review-header">

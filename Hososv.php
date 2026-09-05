@@ -2,14 +2,13 @@
 session_start();
 require_once 'db.php';
 
-// Lấy user_id từ Session, nếu chưa đăng nhập thì tự tìm sinh viên đầu tiên trong CSDL (Ưu tiên ID = 6)
-$user_id = $_SESSION['user']['id'] ?? null;
-
-if (!$user_id) {
-    $stmtUser = $pdo->query("SELECT id FROM users WHERE role = 'student' ORDER BY id ASC LIMIT 1");
-    $defaultUser = $stmtUser->fetch();
-    $user_id = $defaultUser['id'] ?? 6;
+// Kiểm tra phiên đăng nhập
+if (!isset($_SESSION['user']['id'])) {
+    header('Location: dangnhap.php');
+    exit;
 }
+
+$user_id = $_SESSION['user']['id'];
 
 // Giữ đường dẫn trang trước đó vào Session
 if (!isset($_SESSION['back_url_student']) || $_SERVER['REQUEST_METHOD'] === 'GET') {
@@ -18,7 +17,7 @@ if (!isset($_SESSION['back_url_student']) || $_SERVER['REQUEST_METHOD'] === 'GET
         $_SESSION['back_url_student'] = $referer;
     }
 }
-$back_url = $_SESSION['back_url_student'] ?? 'timvadatlich.php';
+$back_url = $_SESSION['back_url_student'] ?? 'trangchu1.php';
 
 $msg = '';
 $error = '';
@@ -58,7 +57,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'user_id' => $user_id
             ]);
         } else {
-            // Chưa có -> INSERT mới (mã SV lấy theo username hoặc mặc định)
+            // Chưa có -> INSERT mới
             $getUserInfo = $pdo->prepare("SELECT username FROM users WHERE id = :id");
             $getUserInfo->execute(['id' => $user_id]);
             $uData = $getUserInfo->fetch();
@@ -76,9 +75,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $pdo->commit();
 
-        if (isset($_SESSION['user'])) {
-            $_SESSION['user']['fullname'] = $fullname;
-        }
+        // Cập nhật lại Session
+        $_SESSION['user']['fullname'] = $fullname;
+        $_SESSION['user_name'] = $fullname;
 
         $msg = "Cập nhật hồ sơ thành công!";
     } catch (PDOException $e) {
@@ -97,14 +96,11 @@ $stmt = $pdo->prepare("
 $stmt->execute(['id' => $user_id]);
 $student_profile = $stmt->fetch();
 
-// Nếu student_code trống trong DB, tự động hiển thị username (SV001)
 $display_code = !empty($student_profile['student_code']) ? $student_profile['student_code'] : ($student_profile['username'] ?? '');
 $selected_student = !empty($student_profile['fullname']) ? $student_profile['fullname'] : 'Học viên';
 
 // Tách chữ cái đại diện Avatar
-$name_parts = explode(' ', trim($selected_student));
-$last_word = end($name_parts);
-$avatar_letter = !empty($last_word) ? strtoupper(substr($last_word, 0, 1)) : 'H';
+$avatar_letter = mb_strtoupper(mb_substr($selected_student, 0, 1, 'UTF-8'), 'UTF-8');
 ?>
 
 <!DOCTYPE html>

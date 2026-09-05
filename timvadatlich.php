@@ -4,29 +4,86 @@ require_once 'db.php';
 
 if (!isset($pdo) && isset($conn)) { $pdo = $conn; }
 
-$student_id = $_SESSION['user_id'] ?? 6;
+// Lấy student_id từ SESSION (mặc định 6 nếu chưa đăng nhập)
+$student_id = $_SESSION['user']['id'] ?? ($_SESSION['user_id'] ?? 6);
 
-// Lấy thông tin người dùng đang đăng nhập để hiển thị trên Header
+// Lấy thông tin người dùng đang đăng nhập
 $stmtUser = $pdo->prepare("SELECT fullname FROM users WHERE id = ?");
 $stmtUser->execute([$student_id]);
 $currentUser = $stmtUser->fetch();
 
 $student_name = !empty($currentUser['fullname']) ? $currentUser['fullname'] : 'Lê Hoàng Nam';
 
-// Tách chữ cái đại diện Avatar (Lấy chữ 'N' trong 'Nam')
+// Tách chữ cái đại diện Avatar
 $name_parts = explode(' ', trim($student_name));
 $last_word = end($name_parts);
-$avatar_letter = !empty($last_word) ? strtoupper(substr($last_word, 0, 1)) : 'N';
+$avatar_letter = !empty($last_word) ? mb_strtoupper(mb_substr($last_word, 0, 1, 'UTF-8'), 'UTF-8') : 'N';
+
+$error_msg = '';
+$success_msg = '';
 
 // Xử lý khi học viên bấm Đặt lịch
 if (isset($_GET['book_slot_id'])) {
     $slot_id = (int)$_GET['book_slot_id'];
 
-    $stmt = $pdo->prepare("INSERT INTO appointments (slot_id, student_id, status) VALUES (?, ?, 'pending')");
-    $stmt->execute([$slot_id, $student_id]);
+    try {
+        // Bắt đầu Transaction để tránh xung đột dữ liệu khi 2 sinh viên bấm cùng lúc
+        $pdo->beginTransaction();
 
-    header('Location: lichhen.php');
-    exit;
+        // 1. Khóa và kiểm tra thông tin slot muốn đặt (FOR UPDATE)
+        $stmtSlot = $pdo->prepare("SELECT * FROM time_slots WHERE slot_id = ? FOR UPDATE");
+        $stmtSlot->execute([$slot_id]);
+        $slotInfo = $stmtSlot->fetch();
+
+        if (!$slotInfo || $slotInfo['status'] !== 'available') {
+            throw new Exception("Khung giờ này đã được sinh viên khác giữ hoặc không còn khả dụng.");
+        }
+
+        // 2. Kiểm tra xem sinh viên đã đặt slot này trước đó chưa
+        $stmtCheckExist = $pdo->prepare("SELECT appointment_id FROM appointments WHERE slot_id = ? AND student_id = ? AND status != 'cancelled'");
+        $stmtCheckExist->execute([$slot_id, $student_id]);
+        if ($stmtCheckExist->fetch()) {
+            throw new Exception("Bạn đã đăng ký khung giờ này rồi.");
+        }
+
+        // 3. Kiểm tra trùng giờ: Sinh viên không được đặt lịch trùng khoảng thời gian với lịch đã có
+        $sqlCheckOverlap = "
+            SELECT a.appointment_id 
+            FROM appointments a
+            JOIN time_slots ts ON a.slot_id = ts.slot_id
+            WHERE a.student_id = ? 
+              AND a.status IN ('pending', 'approved')
+              AND ts.start_time < ? 
+              AND ts.end_time > ?
+        ";
+        $stmtOverlap = $pdo->prepare($sqlCheckOverlap);
+        $stmtOverlap->execute([$student_id, $slotInfo['end_time'], $slotInfo['start_time']]);
+
+        if ($stmtOverlap->fetch()) {
+            throw new Exception("Bạn đã có một lịch hẹn khác trong khoảng thời gian này.");
+        }
+
+        // 4. Tạo lịch hẹn mới
+        $stmtInsert = $pdo->prepare("INSERT INTO appointments (slot_id, student_id, status) VALUES (?, ?, 'pending')");
+        $stmtInsert->execute([$slot_id, $student_id]);
+
+        // 5. Cập nhật trạng thái slot để ngăn người khác đặt trùng
+        $stmtUpdateSlot = $pdo->prepare("UPDATE time_slots SET status = 'booked' WHERE slot_id = ?");
+        $stmtUpdateSlot->execute([$slot_id]);
+
+        // Commit Transaction thành công
+        $pdo->commit();
+
+        header('Location: timvadatlich.php?msg=success');
+        exit;
+
+    } catch (Exception $e) {
+        // Rollback nếu có lỗi trùng lịch hoặc xung đột
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        $error_msg = $e->getMessage();
+    }
 }
 
 // Lấy danh sách các khung giờ còn trống
@@ -66,8 +123,6 @@ $time_slots = $stmt->fetchAll();
         .avatar-circle { width: 34px; height: 34px; background-color: white; color: var(--primary-color); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 15px; }
 
         .dropdown-menu { display: none; position: absolute; right: 0; top: calc(100% + 8px); background-color: white; min-width: 170px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15); padding: 8px 0; z-index: 1000; }
-        
-        /* Class show kích hoạt khi click */
         .dropdown-menu.show { display: block; }
 
         .dropdown-item { display: flex; align-items: center; gap: 10px; padding: 10px 18px; color: var(--primary-color); text-decoration: none; font-size: 14px; font-weight: 600; transition: background 0.2s; }
@@ -86,6 +141,8 @@ $time_slots = $stmt->fetchAll();
         .content-box { background: white; border: 1px solid var(--border-color); border-radius: 12px; padding: 25px; }
         .section-title { color: var(--primary-color); font-size: 18px; font-weight: bold; margin-bottom: 20px; }
         
+        .alert-error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; padding: 12px 18px; border-radius: 8px; margin-bottom: 20px; font-size: 14px; display: flex; align-items: center; gap: 8px; }
+
         .teacher-card { background: white; border: 1px solid var(--border-color); border-radius: 12px; padding: 18px 25px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }
         .teacher-info h4 { color: var(--primary-color); font-size: 16px; margin-bottom: 4px; font-weight: bold; }
         .teacher-topic { color: var(--primary-color); font-size: 13px; margin-bottom: 4px; }
@@ -141,6 +198,14 @@ $time_slots = $stmt->fetchAll();
         <!-- DANH SÁCH LỊCH -->
         <div class="content-box">
             <h3 class="section-title">Danh sách khung giờ tư vấn còn trống</h3>
+
+            <?php if (!empty($error_msg)): ?>
+                <div class="alert-error">
+                    <i class="fa-solid fa-circle-exclamation"></i>
+                    <span><?= htmlspecialchars($error_msg) ?></span>
+                </div>
+            <?php endif; ?>
+
             <?php if (empty($time_slots)): ?>
                 <p style="color: #666; font-size: 14px;">Hiện chưa có khung giờ khả dụng nào.</p>
             <?php else: ?>
@@ -202,13 +267,11 @@ $time_slots = $stmt->fetchAll();
         const userBtn = document.getElementById('userBtn');
         const userDropdown = document.getElementById('userDropdown');
 
-        // Bấm vào nút tài khoản thì ẩn/hiện menu
         userBtn.addEventListener('click', function(e) {
             e.stopPropagation();
             userDropdown.classList.toggle('show');
         });
 
-        // Bấm ra bất kỳ đâu ngoài màn hình thì tự động đóng menu
         document.addEventListener('click', function() {
             userDropdown.classList.remove('show');
         });

@@ -20,6 +20,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         'email'    => 'admin@edulingo.edu.vn',
                         'role'     => 'admin'
                     ];
+                    $_SESSION['user_name'] = 'Quản Trị Viên';
                     header('Location: tk-admin.php');
                     exit;
                 } else {
@@ -57,6 +58,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 'phone'    => $user['phone'],
                                 'role'     => $user['role']
                             ];
+
+                            // Đồng bộ tên hiển thị cho Header
+                            $_SESSION['user_name'] = $user['fullname'];
 
                             // Chuyển hướng theo quyền
                             if ($user['role'] === 'lecturer') {

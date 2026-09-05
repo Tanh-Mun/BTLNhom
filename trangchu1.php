@@ -1,6 +1,15 @@
 <?php
 session_start();
 
+// Kiểm tra quyền đăng nhập
+if (!isset($_SESSION['user']['id'])) {
+    header('Location: dangnhap.php');
+    exit;
+}
+
+$user_fullname = $_SESSION['user']['fullname'] ?? $_SESSION['user_name'] ?? 'Học viên';
+$avatar_letter = mb_strtoupper(mb_substr($user_fullname, 0, 1, 'UTF-8'), 'UTF-8');
+
 function renderStars($rating, $maxStars = 5) {
     echo '<div class="star-rating">';
     for ($i = 1; $i <= $maxStars; $i++) {
@@ -20,7 +29,6 @@ function renderStars($rating, $maxStars = 5) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>EDULINGO - Hệ thống đặt lịch tư vấn giảng viên</title>
-    <!-- FontAwesome Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         :root {
@@ -31,11 +39,7 @@ function renderStars($rating, $maxStars = 5) {
             --text-muted: #666;
         }
 
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
 
         body {
             font-family: Arial, sans-serif;
@@ -49,7 +53,6 @@ function renderStars($rating, $maxStars = 5) {
             padding: 0 15px;
         }
 
-        /* Header */
         .header {
             background-color: var(--primary-color);
             color: white;
@@ -79,7 +82,6 @@ function renderStars($rating, $maxStars = 5) {
             gap: 10px;
         }
 
-        /* User Menu Dropdown */
         .user-menu-container {
             position: relative; 
             display: inline-block;
@@ -146,7 +148,6 @@ function renderStars($rating, $maxStars = 5) {
             background-color: #fff0f5;
         }
 
-        /* Hero */
         .hero {
             background-color: var(--primary-color);
             color: white;
@@ -155,10 +156,7 @@ function renderStars($rating, $maxStars = 5) {
             border-radius: 12px;
         }
 
-        .hero h1 {
-            margin: 10px 0;
-            font-size: 28px;
-        }
+        .hero h1 { margin: 10px 0; font-size: 28px; }
 
         .hero p {
             font-size: 14px;
@@ -178,7 +176,6 @@ function renderStars($rating, $maxStars = 5) {
             display: inline-block;
         }
 
-        /* Thống kê */
         .stats-grid {
             display: grid !important;
             grid-template-columns: repeat(4, 1fr) !important;
@@ -207,52 +204,15 @@ function renderStars($rating, $maxStars = 5) {
             margin-top: 5px;
         }
 
-        /* Titles */
-        .section-header {
-            text-align: center;
-            margin-bottom: 30px;
-        }
+        .section-header { text-align: center; margin-bottom: 30px; }
+        .section-subtitle { color: var(--primary-color); font-size: 13px; font-weight: bold; text-transform: uppercase; }
+        .section-title { font-size: 22px; margin: 8px 0; text-transform: uppercase; }
+        .section-desc { font-size: 14px; color: var(--text-muted); }
 
-        .section-subtitle {
-            color: var(--primary-color);
-            font-size: 13px;
-            font-weight: bold;
-            text-transform: uppercase;
-        }
+        .lecturers-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 60px; }
+        .reviews-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-bottom: 60px; }
 
-        .section-title {
-            font-size: 22px;
-            margin: 8px 0;
-            text-transform: uppercase;
-        }
-
-        .section-desc {
-            font-size: 14px;
-            color: var(--text-muted);
-        }
-
-        /* Grids */
-        .lecturers-grid {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 15px;
-            margin-bottom: 60px;
-        }
-
-        .reviews-grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 15px;
-            margin-bottom: 60px;
-        }
-
-        .card {
-            background: white;
-            border: 1px solid #f0cfd9;
-            border-radius: 12px;
-            padding: 20px 15px;
-            text-align: center;
-        }
+        .card { background: white; border: 1px solid #f0cfd9; border-radius: 12px; padding: 20px 15px; text-align: center; }
 
         .avatar {
             width: 45px;
@@ -268,16 +228,8 @@ function renderStars($rating, $maxStars = 5) {
             margin: 0 auto 12px;
         }
 
-        .card h3 {
-            font-size: 15px;
-            margin-bottom: 4px;
-        }
-
-        .card .dept {
-            font-size: 12px;
-            color: var(--text-muted);
-            margin-bottom: 12px;
-        }
+        .card h3 { font-size: 15px; margin-bottom: 4px; }
+        .card .dept { font-size: 12px; color: var(--text-muted); margin-bottom: 12px; }
 
         .tag {
             background: var(--bg-light);
@@ -289,95 +241,26 @@ function renderStars($rating, $maxStars = 5) {
             margin-bottom: 15px;
         }
 
-        .btn-link {
-            color: var(--primary-color);
-            font-size: 13px;
-            text-decoration: none;
-            font-weight: bold;
-        }
+        .btn-link { color: var(--primary-color); font-size: 13px; text-decoration: none; font-weight: bold; }
+        .star-rating { display: inline-flex; gap: 3px; font-size: 16px; margin-bottom: 10px; }
+        .star.filled { color: var(--primary-color); }
+        .star.empty { color: #f8bbd0; }
 
-        /* Ratings */
-        .star-rating {
-            display: inline-flex;
-            gap: 3px;
-            font-size: 16px;
-            margin-bottom: 10px;
-        }
-        
-        .star.filled {
-            color: var(--primary-color);
-        }
-        
-        .star.empty {
-            color: #f8bbd0;
-        }
+        .review-text { font-size: 13px; color: var(--text-muted); line-height: 1.4; margin-bottom: 15px; text-align: left; }
 
-        .review-text {
-            font-size: 13px;
-            color: var(--text-muted);
-            line-height: 1.4;
-            margin-bottom: 15px;
-            text-align: left;
-        }
+        .footer { background: var(--primary-color); color: white; padding: 40px 0 20px; margin-top: 50px; }
+        .footer-grid { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 30px; padding-bottom: 30px; }
+        .footer h4 { font-size: 13px; margin-bottom: 15px; text-transform: uppercase; }
+        .footer ul { list-style: none; }
+        .footer ul li { margin-bottom: 8px; }
+        .footer ul li a { color: rgba(255, 255, 255, 0.8); text-decoration: none; font-size: 13px; }
 
-        /* Footer */
-        .footer {
-            background: var(--primary-color);
-            color: white;
-            padding: 40px 0 20px;
-            margin-top: 50px;
-        }
-
-        .footer-grid {
-            display: grid;
-            grid-template-columns: 2fr 1fr 1fr 1fr;
-            gap: 30px;
-            padding-bottom: 30px;
-        }
-
-        .footer h4 {
-            font-size: 13px;
-            margin-bottom: 15px;
-            text-transform: uppercase;
-        }
-
-        .footer ul {
-            list-style: none;
-        }
-
-        .footer ul li {
-            margin-bottom: 8px;
-        }
-
-        .footer ul li a {
-            color: rgba(255, 255, 255, 0.8);
-            text-decoration: none;
-            font-size: 13px;
-        }
-
-        .social-icons {
-            display: flex;
-            gap: 10px;
-            margin-top: 15px;
-        }
-
-        .social-icon {
-            width: 32px;
-            height: 32px;
-            background: white;
-            color: var(--primary-color);
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 11px;
-            font-weight: bold;
-        }
+        .social-icons { display: flex; gap: 10px; margin-top: 15px; }
+        .social-icon { width: 32px; height: 32px; background: white; color: var(--primary-color); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold; }
     </style>
 </head>
 <body>
 
-    <!-- Header -->
     <header class="header">
         <div class="logo-container">
             <div class="logo-box">ABC</div>
@@ -390,15 +273,15 @@ function renderStars($rating, $maxStars = 5) {
             <div class="user-menu-container">
                 <div class="user-profile-btn" onclick="toggleUserMenu(event)">
                     <div class="user-avatar-circle">
-                        <?php echo isset($_SESSION['user_name']) ? mb_substr($_SESSION['user_name'], 0, 1) : 'N'; ?>
+                        <?= htmlspecialchars($avatar_letter) ?>
                     </div>
-                    <span><?php echo isset($_SESSION['user_name']) ? htmlspecialchars($_SESSION['user_name']) : 'Lê Hoàng Nam'; ?></span>
+                    <span><?= htmlspecialchars($user_fullname) ?></span>
                 </div>
                 <div class="dropdown-menu" id="userDropdown">
-                    <a href="hoso.php" class="dropdown-item">
+                    <a href="Hososv.php" class="dropdown-item">
                         <i class="fa-regular fa-id-card"></i> Xem hồ sơ
                     </a>
-                    <a href="dangxuat.php" class="dropdown-item">
+                    <a href="dangnhap.php" class="dropdown-item">
                         <i class="fa-solid fa-right-from-bracket"></i> Đăng xuất
                     </a>
                 </div>
@@ -407,7 +290,6 @@ function renderStars($rating, $maxStars = 5) {
     </header>
 
     <div class="container">
-        <!-- Hero Section -->
         <section class="hero">
             <small style="text-transform: uppercase; letter-spacing: 1px;">Hệ thống đặt lịch tư vấn giảng viên</small>
             <h1>Kết nối với giảng viên ngoại ngữ<br>chỉ trong vài giây</h1>
@@ -415,7 +297,6 @@ function renderStars($rating, $maxStars = 5) {
             <a href="timvadatlich.php" class="btn-primary">Tìm giảng viên & đặt lịch</a>
         </section>
 
-        <!-- Thống kê -->
         <div class="stats-grid">
             <div class="stat-card">
                 <div class="stat-number">10</div>
@@ -435,7 +316,6 @@ function renderStars($rating, $maxStars = 5) {
             </div>
         </div>
 
-        <!-- Giảng viên nổi bật -->
         <section>
             <div class="section-header">
                 <div class="section-subtitle">Giảng viên nổi bật</div>
@@ -475,7 +355,6 @@ function renderStars($rating, $maxStars = 5) {
             </div>
         </section>
 
-        <!-- Sinh viên nói gì -->
         <section>
             <div class="section-header">
                 <div class="section-subtitle">Sinh viên nói gì</div>
@@ -509,7 +388,6 @@ function renderStars($rating, $maxStars = 5) {
         </section>
     </div>
 
-    <!-- Footer -->
     <footer class="footer">
         <div class="container footer-grid">
             <div>
@@ -547,7 +425,6 @@ function renderStars($rating, $maxStars = 5) {
         </div>
     </footer>
 
-    <!-- JavaScript xử lý sự kiện bấm hiển thị menu -->
     <script>
         function toggleUserMenu(event) {
             event.stopPropagation();

@@ -18,17 +18,13 @@ $msg_type = 'success';
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     $action = $_POST['action'];
 
-    // --- XÓA HỌC VIÊN ---
     if ($action === 'delete_student') {
         $student_id = intval($_POST['student_id']);
         try {
             $pdo->beginTransaction();
-
-            // Xóa thông tin chi tiết ở bảng student_profiles trước
             $stmtProf = $pdo->prepare("DELETE FROM student_profiles WHERE user_id = ?");
             $stmtProf->execute([$student_id]);
 
-            // Xóa tài khoản ở bảng users
             $stmtUser = $pdo->prepare("DELETE FROM users WHERE id = ?");
             $stmtUser->execute([$student_id]);
 
@@ -40,8 +36,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             $msg_type = 'danger';
         }
     }
-
-    // --- THÊM HỌC VIÊN MỚI ---
     elseif ($action === 'add_student') {
         $fullname     = trim($_POST['fullname']);
         $username     = trim($_POST['username']);
@@ -56,19 +50,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         try {
             $pdo->beginTransaction();
 
-            // Kiểm tra username hoặc email trùng lặp
             $stmtCheck = $pdo->prepare("SELECT id FROM users WHERE username = ? OR email = ?");
             $stmtCheck->execute([$username, $email]);
             if ($stmtCheck->fetch()) {
                 throw new Exception("Tên đăng nhập hoặc Email này đã tồn tại trong hệ thống!");
             }
 
-            // 1. Thêm vào bảng users
             $stmtUser = $pdo->prepare("INSERT INTO users (fullname, username, email, phone, password, role) VALUES (?, ?, ?, ?, ?, 'student')");
             $stmtUser->execute([$fullname, $username, $email, $phone, $password]);
             $new_user_id = $pdo->lastInsertId();
 
-            // 2. Thêm vào bảng student_profiles
             $stmtProf = $pdo->prepare("INSERT INTO student_profiles (user_id, student_code, faculty, major, bio) VALUES (?, ?, ?, ?, ?)");
             $stmtProf->execute([$new_user_id, $student_code, $faculty, $major, $bio]);
 
@@ -80,8 +71,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             $msg_type = 'danger';
         }
     }
-
-    // --- CẬP NHẬT TÀI KHOẢN HỌC VIÊN ---
     elseif ($action === 'update_student') {
         $student_id   = intval($_POST['student_id']);
         $fullname     = trim($_POST['fullname']);
@@ -96,11 +85,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         try {
             $pdo->beginTransaction();
 
-            // 1. Cập nhật bảng users
             $stmtUser = $pdo->prepare("UPDATE users SET fullname = ?, username = ?, email = ?, phone = ? WHERE id = ?");
             $stmtUser->execute([$fullname, $username, $email, $phone, $student_id]);
 
-            // 2. Cập nhật/Chèn mới bảng student_profiles
             $stmtCheckProf = $pdo->prepare("SELECT id FROM student_profiles WHERE user_id = ?");
             $stmtCheckProf->execute([$student_id]);
             
@@ -122,7 +109,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     }
 }
 
-// 2. TRUY VẤN DANH SÁCH HỌC VIÊN KÈM THEO HỒ SƠ TỪ DATABASE
+// 2. TRUY VẤN DANH SÁCH HỌC VIÊN
 $searchKeyword = isset($_GET['keyword']) ? trim($_GET['keyword']) : '';
 
 $sql = "SELECT u.id, u.fullname AS name, u.username, u.email, u.phone,
@@ -167,27 +154,11 @@ foreach ($students_db as $s) {
     <title>Quản Lý Học Viên - EDULINGO Admin</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        :root {
-            --primary-color: #d81b60;
-            --primary-light: #fdf2f5;
-            --border-color: #fce4ec;
-            --text-color: #333;
-            --danger-color: #dc3545;
-        }
-
+        :root { --primary-color: #d81b60; --primary-light: #fdf2f5; --border-color: #fce4ec; --text-color: #333; --danger-color: #dc3545; }
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: Arial, sans-serif; }
         body { background-color: var(--primary-light); color: var(--text-color); display: flex; flex-direction: column; min-height: 100vh; }
 
-        .header-bar {
-            background-color: var(--primary-color);
-            color: white;
-            padding: 14px 60px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            width: 100%;
-        }
-
+        .header-bar { background-color: var(--primary-color); color: white; padding: 14px 60px; display: flex; justify-content: space-between; align-items: center; width: 100%; }
         .logo-section { display: flex; align-items: center; gap: 12px; }
         .logo-box { background-color: white; color: var(--primary-color); font-weight: bold; padding: 4px 8px; border-radius: 4px; font-size: 14px; }
         .brand-info { display: flex; flex-direction: column; }
@@ -195,44 +166,10 @@ foreach ($students_db as $s) {
         .brand-sub { font-size: 10px; opacity: 0.85; }
 
         .user-dropdown { position: relative; display: inline-block; }
-        .user-pill { 
-            background-color: rgba(255, 255, 255, 0.18); 
-            color: white; 
-            padding: 8px 18px; 
-            border-radius: 20px; 
-            font-size: 13px; 
-            font-weight: bold; 
-            display: flex; 
-            align-items: center; 
-            gap: 8px; 
-            border: none; 
-            cursor: pointer; 
-        }
-        .dropdown-menu { 
-            display: none; 
-            position: absolute; 
-            right: 0; 
-            top: calc(100% + 8px); 
-            background-color: white; 
-            min-width: 160px; 
-            box-shadow: 0px 8px 20px rgba(0, 0, 0, 0.12); 
-            border-radius: 12px; 
-            padding: 6px 0;
-            z-index: 1000; 
-            border: 1px solid rgba(0, 0, 0, 0.05);
-        }
+        .user-pill { background-color: rgba(255, 255, 255, 0.18); color: white; padding: 8px 18px; border-radius: 20px; font-size: 13px; font-weight: bold; display: flex; align-items: center; gap: 8px; border: none; cursor: pointer; }
+        .dropdown-menu { display: none; position: absolute; right: 0; top: calc(100% + 8px); background-color: white; min-width: 160px; box-shadow: 0px 8px 20px rgba(0, 0, 0, 0.12); border-radius: 12px; padding: 6px 0; z-index: 1000; border: 1px solid rgba(0, 0, 0, 0.05); }
         .dropdown-menu.show { display: block; }
-        .dropdown-item { 
-            color: #d81b60; 
-            padding: 10px 18px; 
-            text-decoration: none; 
-            display: flex; 
-            align-items: center; 
-            gap: 10px; 
-            font-size: 13px; 
-            font-weight: bold;
-            transition: background 0.2s;
-        }
+        .dropdown-item { color: #d81b60; padding: 10px 18px; text-decoration: none; display: flex; align-items: center; gap: 10px; font-size: 13px; font-weight: bold; transition: background 0.2s; }
         .dropdown-item:hover { background-color: #fce4ec; }
 
         .main-container { max-width: 1000px; margin: 25px auto; padding: 0 20px 50px 20px; width: 100%; flex: 1; }
@@ -248,20 +185,7 @@ foreach ($students_db as $s) {
         .search-input-form input::placeholder { color: var(--primary-color); opacity: 0.7; }
         .search-input-form i.fa-magnifying-glass { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--primary-color); font-size: 13px; opacity: 0.7; }
 
-        .btn-add-student {
-            background-color: var(--primary-color);
-            color: white;
-            border: none;
-            padding: 9px 20px;
-            border-radius: 20px;
-            font-size: 13px;
-            font-weight: bold;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            transition: opacity 0.2s;
-        }
+        .btn-add-student { background-color: var(--primary-color); color: white; border: none; padding: 9px 20px; border-radius: 20px; font-size: 13px; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: opacity 0.2s; }
         .btn-add-student:hover { opacity: 0.9; }
 
         .student-list { display: flex; flex-direction: column; gap: 15px; }
@@ -325,7 +249,7 @@ foreach ($students_db as $s) {
                 <i class="fa-regular fa-user"></i> admin
             </button>
             <div class="dropdown-menu" id="userDropdown">
-                <a href="?action=logout" class="dropdown-item">
+                <a href="hv-admin.php?action=logout" class="dropdown-item">
                     <i class="fa-solid fa-right-from-bracket"></i> Đăng xuất
                 </a>
             </div>
@@ -394,13 +318,11 @@ foreach ($students_db as $s) {
         </div>
     </div>
 
-    <!-- FORM ẨN GỬI YÊU CẦU XÓA -->
     <form id="deleteForm" method="POST" action="hv-admin.php" style="display:none;">
         <input type="hidden" name="action" value="delete_student">
         <input type="hidden" name="student_id" id="deleteStudentId">
     </form>
 
-    <!-- MODAL THÊM & SỬA HỌC VIÊN -->
     <div class="modal-overlay" id="studentModal">
         <form class="modal-box" method="POST" action="hv-admin.php">
             <input type="hidden" name="action" id="modalAction" value="update_student">
@@ -419,7 +341,6 @@ foreach ($students_db as $s) {
             </div>
 
             <div class="modal-body">
-                <!-- THÔNG TIN TÀI KHOẢN -->
                 <div class="form-grid">
                     <div class="form-group">
                         <label>Họ và tên <span style="color:red;">*</span></label>
@@ -442,7 +363,6 @@ foreach ($students_db as $s) {
                     </div>
                 </div>
 
-                <!-- THÔNG TIN HỒ SƠ STUDENT_PROFILES -->
                 <div class="form-grid">
                     <div class="form-group">
                         <label>Mã sinh viên (student_code)</label>
@@ -463,7 +383,7 @@ foreach ($students_db as $s) {
 
                 <div class="form-group full" style="margin-bottom: 15px;">
                     <label>Mô tả / Ghi chú (bio)</label>
-                    <textarea class="form-control" name="bio" id="inputBio" rows="3" placeholder="Nhập mô tả hoặc ghi chú tư vấn..."></textarea>
+                    <textarea class="form-control" name="bio" id="inputBio" rows="3" placeholder="Nhập mô tả hoặc ghi chú..."></textarea>
                 </div>
 
                 <div class="form-group full" id="passwordGroup" style="display: none; margin-bottom: 15px;">
@@ -486,7 +406,7 @@ foreach ($students_db as $s) {
                     <div class="logo-box">ABC</div>
                     <strong style="font-size: 15px;">EDULINGO</strong>
                 </div>
-                <p>Hệ thống đặt lịch tư vấn giảng viên ngoại ngữ, giúp sinh viên tìm và đặt buổi gặp chỉ trong vài bước</p>
+                <p>Hệ thống đặt lịch tư vấn giảng viên ngoại ngữ.</p>
             </div>
             <div class="footer-col">
                 <h5>KHÁM PHÁ</h5>
@@ -519,11 +439,9 @@ foreach ($students_db as $s) {
             userDropdown.classList.remove('show'); 
         });
 
-        // 1. MỞ MODAL THÊM HỌC VIÊN
         function openAddModal() {
             document.getElementById('modalAction').value = 'add_student';
             document.getElementById('modalStudentId').value = '';
-            
             document.getElementById('modalAvatar').innerText = '+';
             document.getElementById('modalSubTitle').innerText = 'TẠO TÀI KHOẢN MỚI';
             document.getElementById('modalStudentName').innerText = 'Thêm học viên mới';
@@ -540,15 +458,12 @@ foreach ($students_db as $s) {
             
             document.getElementById('passwordGroup').style.display = 'flex';
             document.getElementById('btnSubmitModal').innerText = 'Tạo mới học viên';
-
             document.getElementById('studentModal').classList.add('show');
         }
 
-        // 2. MỞ MODAL SỬA HỌC VIÊN
         function openStudentModal(student) {
             document.getElementById('modalAction').value = 'update_student';
             document.getElementById('modalStudentId').value = student.id;
-            
             document.getElementById('modalAvatar').innerText = student.avatar;
             document.getElementById('modalSubTitle').innerText = 'CHỈNH SỬA THÔNG TIN HỌC VIÊN';
             document.getElementById('modalStudentName').innerText = student.name;
@@ -565,7 +480,6 @@ foreach ($students_db as $s) {
 
             document.getElementById('passwordGroup').style.display = 'none';
             document.getElementById('btnSubmitModal').innerText = 'Lưu thông tin';
-
             document.getElementById('studentModal').classList.add('show');
         }
 
@@ -573,7 +487,6 @@ foreach ($students_db as $s) {
             document.getElementById('studentModal').classList.remove('show');
         }
 
-        // 3. XÁC NHẬN XÓA
         function confirmDelete(id, name) {
             if (confirm(`Bạn có chắc chắn muốn xóa học viên "${name}" khỏi hệ thống không?`)) {
                 document.getElementById('deleteStudentId').value = id;

@@ -4,25 +4,28 @@ require_once 'db.php';
 
 if (!isset($pdo) && isset($conn)) { $pdo = $conn; }
 
-$student_id = $_SESSION['user_id'] ?? 6;
+// 1. Kiểm tra session đăng nhập
+if (!isset($_SESSION['user']['id'])) {
+    header('Location: dangnhap.php');
+    exit;
+}
 
-// Lấy thông tin người dùng đang đăng nhập để hiển thị trên Header
+$student_id = $_SESSION['user']['id'];
+
+// 2. Lấy thông tin người dùng đang đăng nhập từ DB
 $stmtUser = $pdo->prepare("SELECT fullname FROM users WHERE id = ?");
 $stmtUser->execute([$student_id]);
 $currentUser = $stmtUser->fetch();
 
-$student_name = !empty($currentUser['fullname']) ? $currentUser['fullname'] : 'Lê Hoàng Nam';
+$student_name = !empty($currentUser['fullname']) ? $currentUser['fullname'] : ($_SESSION['user_name'] ?? 'Học viên');
 
 // Tách chữ cái đại diện Avatar
-$name_parts = explode(' ', trim($student_name));
-$last_word = end($name_parts);
-$avatar_letter = !empty($last_word) ? strtoupper(substr($last_word, 0, 1)) : 'N';
+$avatar_letter = mb_strtoupper(mb_substr($student_name, 0, 1, 'UTF-8'), 'UTF-8');
 
 $appointments = [];
 
 if (isset($pdo)) {
     try {
-        // Truy vấn lấy danh sách các buổi học chưa được đánh giá
         $sql = "
             SELECT a.appointment_id, 
                    COALESCE(u.fullname, 'Giảng viên') AS teacher_name, 
@@ -32,24 +35,16 @@ if (isset($pdo)) {
             JOIN time_slots ts ON a.slot_id = ts.slot_id
             LEFT JOIN users u ON ts.lecturer_id = u.id
             LEFT JOIN reviews r ON a.appointment_id = r.appointment_id
-            WHERE r.id IS NULL
+            WHERE r.id IS NULL AND a.student_id = ?
+            ORDER BY ts.start_time DESC
         ";
         
-        $params = [];
-        if ($student_id) {
-            $sql .= " AND a.student_id = ?";
-            $params[] = $student_id;
-        }
-        
-        $sql .= " ORDER BY ts.start_time DESC";
-        
         $stmt = $pdo->prepare($sql);
-        $stmt->execute($params);
+        $stmt->execute([$student_id]);
         $appointments = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-        // FALLBACK: Lấy danh sách mẫu nếu chưa có dữ liệu chưa đánh giá
         if (empty($appointments)) {
-            $fallback_stmt = $pdo->query("
+            $fallback_stmt = $pdo->prepare("
                 SELECT a.appointment_id, 
                        COALESCE(u.fullname, 'Giảng viên') AS teacher_name, 
                        ts.topic, 
@@ -57,9 +52,11 @@ if (isset($pdo)) {
                 FROM appointments a
                 JOIN time_slots ts ON a.slot_id = ts.slot_id
                 LEFT JOIN users u ON ts.lecturer_id = u.id
+                WHERE a.student_id = ?
                 ORDER BY ts.start_time DESC
                 LIMIT 10
             ");
+            $fallback_stmt->execute([$student_id]);
             $appointments = $fallback_stmt->fetchAll(PDO::FETCH_ASSOC);
         }
     } catch (PDOException $e) {
