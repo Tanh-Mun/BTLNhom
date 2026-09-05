@@ -6,6 +6,20 @@ if (!isset($pdo) && isset($conn)) { $pdo = $conn; }
 
 $student_id = $_SESSION['user_id'] ?? 6; 
 
+// Xử lý khi sinh viên nhấn "Hủy" buổi hẹn
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'cancel_appointment') {
+    $cancel_id = intval($_POST['appointment_id'] ?? 0);
+    if ($cancel_id > 0) {
+        // Cập nhật trạng thái cuộc hẹn thành 'cancelled' (chỉ áp dụng cho lịch đang 'pending')
+        $stmtCancel = $pdo->prepare("UPDATE appointments SET status = 'cancelled' WHERE appointment_id = ? AND student_id = ? AND status = 'pending'");
+        $stmtCancel->execute([$cancel_id, $student_id]);
+        
+        // Reload lại trang để cập nhật giao diện
+        header("Location: lichhen.php");
+        exit();
+    }
+}
+
 // Lấy thông tin người dùng đang đăng nhập để hiển thị trên Header
 $stmtUser = $pdo->prepare("SELECT fullname FROM users WHERE id = ?");
 $stmtUser->execute([$student_id]);
@@ -13,7 +27,7 @@ $currentUser = $stmtUser->fetch();
 
 $student_name = !empty($currentUser['fullname']) ? $currentUser['fullname'] : 'Lê Hoàng Nam';
 
-// Tách chữ cái đại diện Avatar (Lấy chữ 'N' trong 'Nam')
+// Tách chữ cái đại diện Avatar
 $name_parts = explode(' ', trim($student_name));
 $last_word = end($name_parts);
 $avatar_letter = !empty($last_word) ? strtoupper(substr($last_word, 0, 1)) : 'N';
@@ -79,12 +93,16 @@ $my_appointments = $stmt->fetchAll();
         
         .card { background: white; border: 1px solid var(--border-color); border-radius: 12px; padding: 18px 25px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }
         
-        /* CÁC CLASS TRẠNG THÁI (BADGE) */
+        /* CÁC CLASS TRẠNG THÁI & NÚT HỦY */
+        .status-group { display: flex; align-items: center; gap: 8px; }
         .badge { padding: 6px 12px; border-radius: 12px; font-size: 12px; font-weight: bold; }
         .status-pending { background: #fff3cd; color: #856404; }
         .status-approved { background: #d4edda; color: #155724; }
         .status-rejected { background: #f8d7da; color: #721c24; }
         .status-completed { background: #e2e3e5; color: #383d41; }
+        
+        .btn-cancel { background: #dc3545; color: white; border: none; padding: 6px 12px; border-radius: 12px; font-size: 12px; font-weight: bold; cursor: pointer; transition: background 0.2s; }
+        .btn-cancel:hover { background: #bd2130; }
         
         .btn-review-link { background: var(--primary-color); color: white; padding: 6px 14px; border-radius: 15px; font-size: 12px; text-decoration: none; font-weight: bold; display: inline-flex; align-items: center; gap: 4px; }
 
@@ -147,13 +165,20 @@ $my_appointments = $stmt->fetchAll();
                                 <i class="fa-regular fa-clock"></i> <?= date('d/m/Y H:i', strtotime($item['start_time'])) ?> - <?= date('H:i', strtotime($item['end_time'])) ?>
                             </div>
                         </div>
-                        <div>
+                        <div class="status-group">
                             <?php if ($item['status'] === 'pending'): ?>
                                 <span class="badge status-pending">Chờ xác nhận</span>
+                                <form method="POST" style="display:inline;" onsubmit="return confirm('Bạn có chắc chắn muốn hủy lịch hẹn này?');">
+                                    <input type="hidden" name="action" value="cancel_appointment">
+                                    <input type="hidden" name="appointment_id" value="<?= $item['appointment_id'] ?>">
+                                    <button type="submit" class="btn-cancel">Hủy</button>
+                                </form>
                             <?php elseif ($item['status'] === 'approved'): ?>
                                 <span class="badge status-approved">Đã xác nhận</span>
-                            <?php elseif ($item['status'] === 'rejected' || $item['status'] === 'cancelled'): ?>
+                            <?php elseif ($item['status'] === 'rejected'): ?>
                                 <span class="badge status-rejected">Đã từ chối</span>
+                            <?php elseif ($item['status'] === 'cancelled'): ?>
+                                <span class="badge status-rejected">Đã hủy</span>
                             <?php elseif ($item['status'] === 'completed'): ?>
                                 <span class="badge status-completed">Đã hoàn thành</span>
                                 <a href="danhgia.php" class="btn-review-link" style="margin-left: 8px;"><i class="fa-regular fa-star"></i> Viết đánh giá</a>
