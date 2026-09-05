@@ -7,8 +7,12 @@ if (!isset($_SESSION['user']['id'])) {
     exit;
 }
 
-$user_fullname = $_SESSION['user']['fullname'] ?? $_SESSION['user_name'] ?? 'Học viên';
-$avatar_letter = mb_strtoupper(mb_substr($user_fullname, 0, 1, 'UTF-8'), 'UTF-8');
+$user_fullname = trim($_SESSION['user']['fullname'] ?? $_SESSION['user_name'] ?? 'Học viên');
+
+// Tách chữ cái đầu tiên của TÊN (từ cuối cùng trong chuỗi họ tên)
+$name_parts = explode(' ', $user_fullname);
+$first_name = end($name_parts);
+$avatar_letter = mb_strtoupper(mb_substr($first_name, 0, 1, 'UTF-8'), 'UTF-8');
 
 function renderStars($rating, $maxStars = 5) {
     echo '<div class="star-rating">';
@@ -325,28 +329,28 @@ function renderStars($rating, $maxStars = 5) {
 
             <div class="lecturers-grid">
                 <div class="card">
-                    <div class="avatar">N</div>
+                    <div class="avatar">V</div>
                     <h3>Nguyễn Thảo Vy</h3>
                     <div class="dept">Tiếng Anh</div>
                     <div class="tag">IELTS Speaking</div><br>
                     <a href="#" class="btn-link">Xem lịch</a>
                 </div>
                 <div class="card">
-                    <div class="avatar">T</div>
+                    <div class="avatar">Đ</div>
                     <h3>Trần Minh Đức</h3>
                     <div class="dept">Tiếng Pháp</div>
                     <div class="tag">Phát âm cơ bản</div><br>
                     <a href="#" class="btn-link">Xem lịch</a>
                 </div>
                 <div class="card">
-                    <div class="avatar">Y</div>
+                    <div class="avatar">H</div>
                     <h3>Yamada Haruko</h3>
                     <div class="dept">Tiếng Nhật</div>
                     <div class="tag">Giao tiếp N3</div><br>
                     <a href="#" class="btn-link">Xem lịch</a>
                 </div>
                 <div class="card">
-                    <div class="avatar">L</div>
+                    <div class="avatar">H</div>
                     <h3>Lý Gia Hân</h3>
                     <div class="dept">Tiếng Trung</div>
                     <div class="tag">HSK 4</div><br>
@@ -366,21 +370,21 @@ function renderStars($rating, $maxStars = 5) {
                 <div class="card">
                     <?php renderStars(5); ?>
                     <p class="review-text">Đặt lịch rất nhanh, thấy ngay khung giờ trống nên không phải nhắn tin lại. Buổi tư vấn phát âm giúp mình sửa được nhiều lỗi.</p>
-                    <div class="avatar">T</div>
+                    <div class="avatar">A</div>
                     <h3>Trần Lan Anh</h3>
                     <div class="dept">Sinh viên Tiếng Nhật, năm 2</div>
                 </div>
                 <div class="card">
                     <?php renderStars(5); ?>
                     <p class="review-text">Mình cần tư vấn gấp trước buổi phỏng vấn học bổng, đặt được lịch trong ngày với thầy chuyên IELTS Speaking. Rất tiện.</p>
-                    <div class="avatar">N</div>
+                    <div class="avatar">K</div>
                     <h3>Ngô Minh Khôi</h3>
                     <div class="dept">Sinh viên Tiếng Anh, năm 3</div>
                 </div>
                 <div class="card">
                     <?php renderStars(4); ?>
                     <p class="review-text">Giao diện dễ dùng, lọc theo ngôn ngữ và chủ đề rất nhanh. Chỉ mong có nhiều khung giờ vào tối muộn hơn để chọn.</p>
-                    <div class="avatar">Đ</div>
+                    <div class="avatar">P</div>
                     <h3>Đỗ Hải Phương</h3>
                     <div class="dept">Sinh viên Tiếng Trung, năm 2</div>
                 </div>

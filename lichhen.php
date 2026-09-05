@@ -12,17 +12,34 @@ if (!isset($_SESSION['user']['id'])) {
 
 $student_id = $_SESSION['user']['id']; 
 
+// Xử lý Hủy cuộc hẹn khi sinh viên bấm nút Hủy
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['cancel_appointment_id'])) {
+    $cancel_id = (int)$_POST['cancel_appointment_id'];
+    
+    try {
+        $stmtCancel = $pdo->prepare("UPDATE appointments SET status = 'cancelled' WHERE appointment_id = ? AND student_id = ?");
+        $stmtCancel->execute([$cancel_id, $student_id]);
+    } catch (PDOException $e) {
+        // Bỏ qua lỗi
+    }
+    
+    header('Location: lichhen.php');
+    exit;
+}
+
 // 2. Lấy thông tin người dùng đang đăng nhập từ DB
 $stmtUser = $pdo->prepare("SELECT fullname FROM users WHERE id = ?");
 $stmtUser->execute([$student_id]);
 $currentUser = $stmtUser->fetch();
 
-$student_name = !empty($currentUser['fullname']) ? $currentUser['fullname'] : ($_SESSION['user_name'] ?? 'Học viên');
+$student_name = !empty($currentUser['fullname']) ? trim($currentUser['fullname']) : ($_SESSION['user_name'] ?? 'Học viên');
 
-// Tách chữ cái đại diện Avatar
-$avatar_letter = mb_strtoupper(mb_substr($student_name, 0, 1, 'UTF-8'), 'UTF-8');
+// Tách chữ cái đầu tiên của TÊN (từ cuối cùng trong chuỗi họ tên)
+$name_parts = explode(' ', $student_name);
+$first_name = end($name_parts); // Lấy từ cuối cùng (Tên)
+$avatar_letter = mb_strtoupper(mb_substr($first_name, 0, 1, 'UTF-8'), 'UTF-8');
 
-// Truy vấn danh sách cuộc hẹn của học viên
+// Truy vấn danh sách cuộc hẹn
 $sql = "SELECT a.appointment_id, a.status, ts.topic, ts.start_time, ts.end_time, ts.location, u.fullname AS lecturer_name
         FROM appointments a
         JOIN time_slots ts ON a.slot_id = ts.slot_id
@@ -83,13 +100,16 @@ $my_appointments = $stmt->fetchAll();
         
         .card { background: white; border: 1px solid var(--border-color); border-radius: 12px; padding: 18px 25px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }
         
-        .badge { padding: 6px 12px; border-radius: 12px; font-size: 12px; font-weight: bold; }
+        .badge { padding: 6px 12px; border-radius: 12px; font-size: 12px; font-weight: bold; display: inline-block; }
         .status-pending { background: #fff3cd; color: #856404; }
         .status-approved { background: #d4edda; color: #155724; }
         .status-rejected { background: #f8d7da; color: #721c24; }
         .status-completed { background: #e2e3e5; color: #383d41; }
         
-        .btn-review-link { background: var(--primary-color); color: white; padding: 6px 14px; border-radius: 15px; font-size: 12px; text-decoration: none; font-weight: bold; display: inline-flex; align-items: center; gap: 4px; }
+        .btn-cancel { background-color: white; color: #dc3545; border: 1px solid #dc3545; padding: 5px 12px; border-radius: 12px; font-size: 12px; font-weight: bold; cursor: pointer; transition: all 0.2s; margin-left: 8px; }
+        .btn-cancel:hover { background-color: #dc3545; color: white; }
+
+        .btn-review-link { background: var(--primary-color); color: white; padding: 6px 14px; border-radius: 15px; font-size: 12px; text-decoration: none; font-weight: bold; display: inline-flex; align-items: center; gap: 4px; margin-left: 8px; }
 
         /* FOOTER UI */
         .footer { background-color: var(--primary-color); color: white; padding: 40px 60px; margin-top: 40px; }
@@ -150,16 +170,22 @@ $my_appointments = $stmt->fetchAll();
                                 <i class="fa-regular fa-clock"></i> <?= date('d/m/Y H:i', strtotime($item['start_time'])) ?> - <?= date('H:i', strtotime($item['end_time'])) ?>
                             </div>
                         </div>
-                        <div>
+                        <div style="display: flex; align-items: center;">
                             <?php if ($item['status'] === 'pending'): ?>
                                 <span class="badge status-pending">Chờ xác nhận</span>
+                                <form method="POST" style="margin: 0;" onsubmit="return confirm('Bạn có chắc chắn muốn hủy cuộc hẹn này?');">
+                                    <input type="hidden" name="cancel_appointment_id" value="<?= $item['appointment_id'] ?>">
+                                    <button type="submit" class="btn-cancel">Hủy</button>
+                                </form>
                             <?php elseif ($item['status'] === 'approved'): ?>
                                 <span class="badge status-approved">Đã xác nhận</span>
-                            <?php elseif ($item['status'] === 'rejected' || $item['status'] === 'cancelled'): ?>
+                            <?php elseif ($item['status'] === 'rejected'): ?>
                                 <span class="badge status-rejected">Đã từ chối</span>
+                            <?php elseif ($item['status'] === 'cancelled'): ?>
+                                <span class="badge status-rejected">Đã hủy</span>
                             <?php elseif ($item['status'] === 'completed'): ?>
                                 <span class="badge status-completed">Đã hoàn thành</span>
-                                <a href="danhgia.php" class="btn-review-link" style="margin-left: 8px;"><i class="fa-regular fa-star"></i> Viết đánh giá</a>
+                                <a href="danhgia.php" class="btn-review-link"><i class="fa-regular fa-star"></i> Viết đánh giá</a>
                             <?php endif; ?>
                         </div>
                     </div>

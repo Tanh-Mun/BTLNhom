@@ -17,10 +17,12 @@ $stmtUser = $pdo->prepare("SELECT fullname FROM users WHERE id = ?");
 $stmtUser->execute([$student_id]);
 $currentUser = $stmtUser->fetch();
 
-$student_name = !empty($currentUser['fullname']) ? $currentUser['fullname'] : ($_SESSION['user_name'] ?? 'Học viên');
+$student_name = !empty($currentUser['fullname']) ? trim($currentUser['fullname']) : ($_SESSION['user_name'] ?? 'Học viên');
 
-// Tách chữ cái đại diện Avatar
-$avatar_letter = mb_strtoupper(mb_substr($student_name, 0, 1, 'UTF-8'), 'UTF-8');
+// Tách chữ cái đại diện Avatar (Lấy chữ cái đầu của TÊN - từ cuối cùng)
+$name_parts = explode(' ', $student_name);
+$first_name = end($name_parts);
+$avatar_letter = mb_strtoupper(mb_substr($first_name, 0, 1, 'UTF-8'), 'UTF-8');
 
 $appointments = [];
 

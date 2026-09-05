@@ -17,8 +17,12 @@ $stmtUser = $pdo->prepare("SELECT fullname FROM users WHERE id = ?");
 $stmtUser->execute([$student_id]);
 $currentUser = $stmtUser->fetch();
 
-$student_name = !empty($currentUser['fullname']) ? $currentUser['fullname'] : ($_SESSION['user_name'] ?? 'Học viên');
-$avatar_letter = mb_strtoupper(mb_substr($student_name, 0, 1, 'UTF-8'), 'UTF-8');
+$student_name = !empty($currentUser['fullname']) ? trim($currentUser['fullname']) : ($_SESSION['user_name'] ?? 'Học viên');
+
+// Tách chữ cái đầu tiên của TÊN (từ cuối cùng trong chuỗi họ tên)
+$name_parts = explode(' ', $student_name);
+$first_name = end($name_parts);
+$avatar_letter = mb_strtoupper(mb_substr($first_name, 0, 1, 'UTF-8'), 'UTF-8');
 
 $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 $teacher_name = "Giảng viên";
@@ -91,7 +95,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             flex-direction: column;
         }
 
-        /* HEADER UI (KHÔNG MENU XỔ XUỐNG) */
+        /* HEADER UI */
         .header { 
             background-color: var(--primary-color); 
             color: white; 
@@ -259,7 +263,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 </head>
 <body>
 
-    <!-- HEADER (KHÔNG DROPDOWN) -->
+    <!-- HEADER -->
     <div class="header">
         <div class="header-brand">
             <div class="logo-box">ABC</div>
