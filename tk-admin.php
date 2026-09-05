@@ -1,9 +1,61 @@
 <?php
 session_start();
+require_once 'db.php';
+
+if (!isset($pdo) && isset($conn)) { $pdo = $conn; }
+
 if (isset($_GET['action']) && $_GET['action'] === 'logout') {
     session_destroy();
     header('Location: dangnhap.php');
     exit;
+}
+
+// 1. Lấy thống kê tổng quan các cuộc hẹn
+$stat_sql = "SELECT 
+    COUNT(*) AS total_appointments,
+    SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS total_pending,
+    SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) AS total_approved,
+    SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) AS total_rejected,
+    SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS total_completed,
+    SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) AS total_cancelled
+FROM appointments";
+$stat_stmt = $pdo->query($stat_sql);
+$stats = $stat_stmt->fetch(PDO::FETCH_ASSOC);
+
+$total_appointments = $stats['total_appointments'] ?? 0;
+$total_pending      = $stats['total_pending'] ?? 0;
+$total_approved     = $stats['total_approved'] ?? 0;
+$total_rejected     = $stats['total_rejected'] ?? 0;
+$total_completed    = $stats['total_completed'] ?? 0;
+$total_cancelled    = $stats['total_cancelled'] ?? 0;
+
+// Hàm tính phần trăm cho thanh tiến trình
+function get_percentage($value, $total) {
+    return $total > 0 ? round(($value / $total) * 100) : 0;
+}
+
+// 2. Lấy thống kê cuộc hẹn chi tiết theo từng Giảng viên
+$teacher_sql = "SELECT 
+    u.id AS lecturer_id,
+    u.fullname AS lecturer_name,
+    COUNT(a.status) AS total_hen,
+    SUM(CASE WHEN a.status = 'completed' THEN 1 ELSE 0 END) AS total_xong,
+    SUM(CASE WHEN a.status = 'pending' THEN 1 ELSE 0 END) AS total_cho
+FROM users u
+LEFT JOIN time_slots ts ON u.id = ts.lecturer_id
+LEFT JOIN appointments a ON ts.slot_id = a.slot_id
+WHERE u.role = 'lecturer' OR u.role = 'teacher' OR u.role = 'gv'
+GROUP BY u.id, u.fullname
+ORDER BY total_hen DESC";
+
+$teacher_stmt = $pdo->query($teacher_sql);
+$teachers = $teacher_stmt->fetchAll(PDO::FETCH_ASSOC);
+
+$max_hen = 1;
+foreach ($teachers as $t) {
+    if ($t['total_hen'] > $max_hen) {
+        $max_hen = $t['total_hen'];
+    }
 }
 ?>
 <!DOCTYPE html>
@@ -18,22 +70,78 @@ if (isset($_GET['action']) && $_GET['action'] === 'logout') {
             --primary-color: #d81b60;
             --primary-light: #fdf2f5;
             --border-color: #fce4ec;
+            --text-color: #333;
         }
+
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: Arial, sans-serif; }
-        body { background-color: var(--primary-light); display: flex; flex-direction: column; min-height: 100vh; }
-        .header { background-color: var(--primary-color); color: white; padding: 12px 40px; display: flex; align-items: center; justify-content: space-between; }
-        .logo-container { display: flex; align-items: center; gap: 10px; }
-        .logo-box { background: white; color: var(--primary-color); font-weight: bold; padding: 4px 8px; border-radius: 4px; font-size: 14px; }
+        body { background-color: var(--primary-light); color: var(--text-color); display: flex; flex-direction: column; min-height: 100vh; }
+
+        /* HEADER FULL WIDTH */
+        .header-bar {
+            background-color: var(--primary-color);
+            color: white;
+            padding: 14px 60px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            width: 100%;
+        }
+
+        .logo-section { display: flex; align-items: center; gap: 12px; }
+        .logo-box { background-color: white; color: var(--primary-color); font-weight: bold; padding: 4px 8px; border-radius: 4px; font-size: 14px; }
+        .brand-info { display: flex; flex-direction: column; }
+        .brand-name { font-weight: bold; font-size: 15px; line-height: 1.2; }
+        .brand-sub { font-size: 10px; opacity: 0.85; }
+
+        /* DROPDOWN MENU CẢI TIẾN THEO MẪU */
         .user-dropdown { position: relative; display: inline-block; }
-        .btn-profile { color: white; text-decoration: none; font-size: 13px; font-weight: bold; background: rgba(255, 255, 255, 0.18); padding: 7px 16px; border-radius: 20px; display: flex; align-items: center; gap: 6px; border: none; cursor: pointer; }
-        .dropdown-menu { display: none; position: absolute; right: 0; top: 110%; background-color: white; min-width: 150px; box-shadow: 0px 4px 12px rgba(0,0,0,0.15); border-radius: 8px; overflow: hidden; z-index: 1000; }
+        .user-pill { 
+            background-color: rgba(255, 255, 255, 0.18); 
+            color: white; 
+            padding: 8px 18px; 
+            border-radius: 20px; 
+            font-size: 13px; 
+            font-weight: bold; 
+            display: flex; 
+            align-items: center; 
+            gap: 8px; 
+            border: none; 
+            cursor: pointer; 
+        }
+        .dropdown-menu { 
+            display: none; 
+            position: absolute; 
+            right: 0; 
+            top: calc(100% + 8px); 
+            background-color: white; 
+            min-width: 160px; 
+            box-shadow: 0px 8px 20px rgba(0, 0, 0, 0.12); 
+            border-radius: 12px; 
+            padding: 6px 0;
+            z-index: 1000; 
+            border: 1px solid rgba(0, 0, 0, 0.05);
+        }
         .dropdown-menu.show { display: block; }
-        .dropdown-item { color: var(--primary-color); padding: 10px 16px; text-decoration: none; display: flex; align-items: center; gap: 8px; font-size: 13px; }
-        .dropdown-item:hover { background-color: var(--primary-light); }
-        .main-container { max-width: 1000px; margin: 0 auto; padding: 25px 20px 50px 20px; width: 100%; flex: 1; }
-        .nav-tabs { display: inline-flex; background: white; padding: 4px; border-radius: 30px; border: 1px solid var(--border-color); margin-bottom: 25px; }
-        .tab-btn { padding: 8px 18px; border-radius: 20px; border: none; background: transparent; color: var(--primary-color); font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; text-decoration: none; }
-        .tab-btn.main-active { background: var(--primary-color); color: white; }
+        .dropdown-item { 
+            color: #d81b60; 
+            padding: 10px 18px; 
+            text-decoration: none; 
+            display: flex; 
+            align-items: center; 
+            gap: 10px; 
+            font-size: 13px; 
+            font-weight: bold;
+            transition: background 0.2s;
+        }
+        .dropdown-item:hover { background-color: #fce4ec; }
+
+        .main-container { max-width: 1000px; margin: 25px auto; padding: 0 20px 50px 20px; width: 100%; flex: 1; }
+
+        /* NAV TABS CĂN TRÁI */
+        .nav-tabs-wrapper { display: flex; justify-content: flex-start; margin-bottom: 25px; }
+        .nav-tabs { display: inline-flex; background: white; padding: 4px; border-radius: 30px; border: 1px solid var(--border-color); box-shadow: 0 2px 5px rgba(0,0,0,0.02); }
+        .nav-tab { padding: 8px 22px; border-radius: 20px; border: none; background: transparent; color: var(--primary-color); font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; text-decoration: none; transition: all 0.2s ease; }
+        .nav-tab.active { background-color: var(--primary-color); color: white; }
         
         .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 25px; }
         .stat-card { background: white; border: 1px solid var(--border-color); border-radius: 12px; padding: 20px; text-align: center; }
@@ -60,52 +168,56 @@ if (isset($_GET['action']) && $_GET['action'] === 'logout') {
         .footer-links { list-style: none; }
         .footer-links li { margin-bottom: 10px; }
         .footer-links a { color: white; text-decoration: none; font-size: 12px; opacity: 0.95; }
-        .social-icons { display: flex; gap: 10px; }
-        .social-btn { width: 32px; height: 32px; background: white; color: var(--primary-color); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold; text-decoration: none; }
     </style>
 </head>
 <body>
-    <header class="header">
-        <div class="logo-container">
+
+    <div class="header-bar">
+        <div class="logo-section">
             <div class="logo-box">ABC</div>
-            <div>
-                <strong style="font-size: 15px;">EDULINGO</strong><br>
-                <small style="font-size: 10px; opacity: 0.85;">Hệ thống đặt lịch tư vấn giảng viên</small>
+            <div class="brand-info">
+                <span class="brand-name">EDULINGO</span>
+                <span class="brand-sub">Hệ thống đặt lịch tư vấn giảng viên</span>
             </div>
         </div>
         <div class="user-dropdown">
-            <button class="btn-profile" id="userMenuBtn">
+            <button class="user-pill" id="userMenuBtn">
                 <i class="fa-regular fa-user"></i> admin
             </button>
             <div class="dropdown-menu" id="userDropdown">
-                <a href="?action=logout" class="dropdown-item" style="color: #d81b60;"><i class="fa-solid fa-right-from-bracket"></i> Đăng xuất</a>
+                <a href="?action=logout" class="dropdown-item">
+                    <i class="fa-solid fa-right-from-bracket"></i> Đăng xuất
+                </a>
             </div>
         </div>
-    </header>
+    </div>
 
     <div class="main-container">
-        <div class="nav-tabs">
-            <a href="tk-admin.php" class="tab-btn main-active"><i class="fa-solid fa-chart-pie"></i> Thống kê</a>
-            <a href="gv-admin.php" class="tab-btn"><i class="fa-regular fa-user"></i> Giảng viên</a>
-            <a href="dg-admin.php" class="tab-btn"><i class="fa-regular fa-star"></i> Đánh giá</a>
+        <div class="nav-tabs-wrapper">
+            <div class="nav-tabs">
+                <a href="tk-admin.php" class="nav-tab active"><i class="fa-solid fa-chart-pie"></i> Thống kê</a>
+                <a href="gv-admin.php" class="nav-tab"><i class="fa-regular fa-user"></i> Giảng viên</a>
+                <a href="hv-admin.php" class="nav-tab"><i class="fa-solid fa-graduation-cap"></i> Học viên</a>
+                <a href="dg-admin.php" class="nav-tab"><i class="fa-regular fa-star"></i> Đánh giá</a>
+            </div>
         </div>
 
         <div class="stats-grid">
             <div class="stat-card">
-                <div class="stat-number">18</div>
+                <div class="stat-number"><?= $total_appointments ?></div>
                 <div class="stat-label">Tổng số cuộc hẹn</div>
             </div>
             <div class="stat-card">
-                <div class="stat-number">3</div>
+                <div class="stat-number"><?= $total_pending ?></div>
                 <div class="stat-label">Đang chờ duyệt</div>
             </div>
             <div class="stat-card">
-                <div class="stat-number">7</div>
+                <div class="stat-number"><?= $total_approved ?></div>
                 <div class="stat-label">Đã duyệt</div>
             </div>
             <div class="stat-card">
-                <div class="stat-number">2</div>
-                <div class="stat-label">Danh sách chờ</div>
+                <div class="stat-number"><?= $total_completed ?></div>
+                <div class="stat-label">Hoàn thành</div>
             </div>
         </div>
 
@@ -113,97 +225,90 @@ if (isset($_GET['action']) && $_GET['action'] === 'logout') {
             <h3>Phản hồi theo trạng thái</h3>
             <div class="progress-row">
                 <span class="progress-label">Chờ duyệt</span>
-                <div class="progress-bar-container"><div class="progress-bar-fill" style="width: 30%;"></div></div>
-                <span class="progress-value">3</span>
+                <div class="progress-bar-container"><div class="progress-bar-fill" style="width: <?= get_percentage($total_pending, $total_appointments) ?>%;"></div></div>
+                <span class="progress-value"><?= $total_pending ?></span>
             </div>
             <div class="progress-row">
                 <span class="progress-label">Đã duyệt</span>
-                <div class="progress-bar-container"><div class="progress-bar-fill" style="width: 70%;"></div></div>
-                <span class="progress-value">7</span>
+                <div class="progress-bar-container"><div class="progress-bar-fill" style="width: <?= get_percentage($total_approved, $total_appointments) ?>%;"></div></div>
+                <span class="progress-value"><?= $total_approved ?></span>
             </div>
             <div class="progress-row">
                 <span class="progress-label">Từ chối</span>
-                <div class="progress-bar-container"><div class="progress-bar-fill" style="width: 10%;"></div></div>
-                <span class="progress-value">1</span>
+                <div class="progress-bar-container"><div class="progress-bar-fill" style="width: <?= get_percentage($total_rejected, $total_appointments) ?>%;"></div></div>
+                <span class="progress-value"><?= $total_rejected ?></span>
             </div>
             <div class="progress-row">
                 <span class="progress-label">Hoàn thành</span>
-                <div class="progress-bar-container"><div class="progress-bar-fill" style="width: 100%;"></div></div>
-                <span class="progress-value">10</span>
+                <div class="progress-bar-container"><div class="progress-bar-fill" style="width: <?= get_percentage($total_completed, $total_appointments) ?>%;"></div></div>
+                <span class="progress-value"><?= $total_completed ?></span>
             </div>
             <div class="progress-row">
                 <span class="progress-label">Đã huỷ</span>
-                <div class="progress-bar-container"><div class="progress-bar-fill" style="width: 0%;"></div></div>
-                <span class="progress-value">0</span>
+                <div class="progress-bar-container"><div class="progress-bar-fill" style="width: <?= get_percentage($total_cancelled, $total_appointments) ?>%;"></div></div>
+                <span class="progress-value"><?= $total_cancelled ?></span>
             </div>
         </div>
 
         <div class="admin-section">
             <h3>Theo giảng viên</h3>
-            <div class="teacher-progress-row">
-                <span class="teacher-name-label">Lý Gia Hân</span>
-                <div class="progress-bar-container"><div class="progress-bar-fill" style="width: 0%;"></div></div>
-                <span class="teacher-stat-text">0 hẹn - 0 xong - 0 chờ</span>
-            </div>
-            <div class="teacher-progress-row">
-                <span class="teacher-name-label">Nguyễn Thảo Vy</span>
-                <div class="progress-bar-container"><div class="progress-bar-fill" style="width: 80%;"></div></div>
-                <span class="teacher-stat-text">3 hẹn - 2 xong - 1 chờ</span>
-            </div>
-            <div class="teacher-progress-row">
-                <span class="teacher-name-label">Trần Minh Đức</span>
-                <div class="progress-bar-container"><div class="progress-bar-fill" style="width: 50%;"></div></div>
-                <span class="teacher-stat-text">2 hẹn - 2 xong - 1 chờ</span>
-            </div>
-            <div class="teacher-progress-row">
-                <span class="teacher-name-label">Yamada Haruko</span>
-                <div class="progress-bar-container"><div class="progress-bar-fill" style="width: 40%;"></div></div>
-                <span class="teacher-stat-text">1 hẹn - 1 xong - 0 chờ</span>
-            </div>
+            <?php if (empty($teachers)): ?>
+                <p style="font-size: 13px; color: #777;">Chưa có dữ liệu giảng viên.</p>
+            <?php else: ?>
+                <?php foreach ($teachers as $t): ?>
+                    <?php $fill_percent = get_percentage($t['total_hen'], $max_hen); ?>
+                    <div class="teacher-progress-row">
+                        <span class="teacher-name-label"><?= htmlspecialchars($t['lecturer_name']) ?></span>
+                        <div class="progress-bar-container">
+                            <div class="progress-bar-fill" style="width: <?= $fill_percent ?>%;"></div>
+                        </div>
+                        <span class="teacher-stat-text"><?= $t['total_hen'] ?> hẹn - <?= $t['total_xong'] ?> xong - <?= $t['total_cho'] ?> chờ</span>
+                    </div>
+                <?php endforeach; ?>
+            <?php endif; ?>
         </div>
     </div>
 
     <footer class="footer">
         <div class="footer-grid">
             <div class="footer-col">
-                <div class="logo-container" style="margin-bottom: 12px;">
+                <div class="logo-section" style="margin-bottom: 12px;">
                     <div class="logo-box">ABC</div>
-                    <strong>EDULINGO</strong>
+                    <strong style="font-size: 15px;">EDULINGO</strong>
                 </div>
                 <p>Hệ thống đặt lịch tư vấn giảng viên ngoại ngữ, giúp sinh viên tìm và đặt buổi gặp chỉ trong vài bước</p>
-                <div class="social-icons">
-                    <a href="#" class="social-btn">FB</a>
-                    <a href="#" class="social-btn">ZL</a>
-                    <a href="#" class="social-btn"><i class="fa-regular fa-envelope"></i></a>
-                </div>
             </div>
             <div class="footer-col">
                 <h5>KHÁM PHÁ</h5>
                 <ul class="footer-links">
                     <li><a href="#">Tìm giảng viên</a></li>
                     <li><a href="#">Đánh giá</a></li>
-                    <li><a href="#">Ngôn ngữ hỗ trợ</a></li>
-                    <li><a href="#">Câu hỏi thường gặp</a></li>
                 </ul>
             </div>
             <div class="footer-col">
-                <h5>DÀNH CHO GIẢNG VIÊN</h5>
+                <h5>GIẢNG VIÊN</h5>
                 <ul class="footer-links">
                     <li><a href="#">Đăng ký giảng dạy</a></li>
                     <li><a href="#">Quản lý khung giờ</a></li>
                 </ul>
             </div>
             <div class="footer-col">
-                <h5>NHẬN THÔNG BÁO</h5>
-                <p>Nhận tin khi có giảng viên mới hoặc khung giờ mới mở</p>
+                <h5>THÔNG BÁO</h5>
+                <p>Nhận tin khi có giảng viên mới mở lịch</p>
             </div>
         </div>
     </footer>
+
     <script>
         const userMenuBtn = document.getElementById('userMenuBtn');
         const userDropdown = document.getElementById('userDropdown');
-        userMenuBtn.addEventListener('click', (e) => { e.stopPropagation(); userDropdown.classList.toggle('show'); });
-        document.addEventListener('click', () => { userDropdown.classList.remove('show'); });
+        userMenuBtn.addEventListener('click', (e) => { 
+            e.stopPropagation(); 
+            userDropdown.classList.toggle('show'); 
+        });
+        document.addEventListener('click', () => { 
+            userDropdown.classList.remove('show'); 
+        });
     </script>
 </body>
 </html>

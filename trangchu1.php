@@ -20,6 +20,8 @@ function renderStars($rating, $maxStars = 5) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>EDULINGO - Hệ thống đặt lịch tư vấn giảng viên</title>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         :root {
             --primary-color: #d81b60;
@@ -77,14 +79,71 @@ function renderStars($rating, $maxStars = 5) {
             gap: 10px;
         }
 
-        .auth-btn {
-            background: white;
+        /* User Menu Dropdown */
+        .user-menu-container {
+            position: relative; 
+            display: inline-block;
+        }
+
+        .user-profile-btn {
+            display: flex; 
+            align-items: center; 
+            gap: 10px; 
+            color: white; 
+            background-color: rgba(255, 255, 255, 0.15); 
+            padding: 6px 14px 6px 8px; 
+            border-radius: 25px; 
+            border: 1px solid rgba(255, 255, 255, 0.3); 
+            text-decoration: none; 
+            font-size: 14px; 
+            font-weight: 600; 
+            cursor: pointer; 
+            user-select: none;
+        }
+
+        .user-avatar-circle {
+            width: 34px; 
+            height: 34px; 
+            background-color: white; 
+            color: var(--primary-color); 
+            border-radius: 50%; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            font-weight: bold; 
+            font-size: 15px;
+        }
+
+        .dropdown-menu {
+            display: none;
+            position: absolute;
+            right: 0;
+            top: calc(100% + 8px);
+            background-color: white;
+            min-width: 170px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
+            border-radius: 12px;
+            padding: 8px 0;
+            z-index: 1000;
+        }
+
+        .dropdown-menu.show {
+            display: block;
+        }
+
+        .dropdown-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 16px;
             color: var(--primary-color);
-            padding: 8px 18px;
             text-decoration: none;
-            border-radius: 20px;
-            font-weight: bold;
             font-size: 14px;
+            font-weight: 500;
+        }
+
+        .dropdown-item:hover {
+            background-color: #fff0f5;
         }
 
         /* Hero */
@@ -328,7 +387,22 @@ function renderStars($rating, $maxStars = 5) {
             </div>
         </div>
         <div class="header-auth">
-            <a href="dangnhap.php" class="auth-btn">Đăng nhập</a>
+            <div class="user-menu-container">
+                <div class="user-profile-btn" onclick="toggleUserMenu(event)">
+                    <div class="user-avatar-circle">
+                        <?php echo isset($_SESSION['user_name']) ? mb_substr($_SESSION['user_name'], 0, 1) : 'N'; ?>
+                    </div>
+                    <span><?php echo isset($_SESSION['user_name']) ? htmlspecialchars($_SESSION['user_name']) : 'Lê Hoàng Nam'; ?></span>
+                </div>
+                <div class="dropdown-menu" id="userDropdown">
+                    <a href="hoso.php" class="dropdown-item">
+                        <i class="fa-regular fa-id-card"></i> Xem hồ sơ
+                    </a>
+                    <a href="dangxuat.php" class="dropdown-item">
+                        <i class="fa-solid fa-right-from-bracket"></i> Đăng xuất
+                    </a>
+                </div>
+            </div>
         </div>
     </header>
 
@@ -338,7 +412,7 @@ function renderStars($rating, $maxStars = 5) {
             <small style="text-transform: uppercase; letter-spacing: 1px;">Hệ thống đặt lịch tư vấn giảng viên</small>
             <h1>Kết nối với giảng viên ngoại ngữ<br>chỉ trong vài giây</h1>
             <p>Tìm giảng viên theo ngôn ngữ và chủ đề tư vấn, xem khung giờ còn trống theo thời gian thực và gửi yêu cầu đặt lịch — tất cả trong một nơi.</p>
-            <a href="search" class="btn-primary">Tìm giảng viên & đặt lịch</a>
+            <a href="timvadatlich.php" class="btn-primary">Tìm giảng viên & đặt lịch</a>
         </section>
 
         <!-- Thống kê -->
@@ -473,5 +547,20 @@ function renderStars($rating, $maxStars = 5) {
         </div>
     </footer>
 
+    <!-- JavaScript xử lý sự kiện bấm hiển thị menu -->
+    <script>
+        function toggleUserMenu(event) {
+            event.stopPropagation();
+            var menu = document.getElementById('userDropdown');
+            menu.classList.toggle('show');
+        }
+
+        window.onclick = function(event) {
+            var menu = document.getElementById('userDropdown');
+            if (menu && menu.classList.contains('show')) {
+                menu.classList.remove('show');
+            }
+        };
+    </script>
 </body>
 </html>

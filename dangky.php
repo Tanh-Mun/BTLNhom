@@ -1,5 +1,6 @@
 <?php
 session_start();
+require_once 'db.php'; // Kết nối CSDL
 
 $error = '';
 
@@ -19,18 +20,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif (!$agree) {
         $error = 'Bạn phải đồng ý với Điều khoản sử dụng và Chính sách bảo mật!';
     } else {
-        // Lưu vào Session để các trang khác (như hồ sơ, trang chủ) có thể đọc được
-        $_SESSION['user'] = [
-            'fullname' => $fullname,
-            'username' => $username,
-            'email'    => $email,
-            'phone'    => $phone,
-            'role'     => 'student'
-        ];
+        try {
+            // 1. Kiểm tra xem tên đăng nhập hoặc email đã tồn tại chưa
+            $checkStmt = $pdo->prepare("SELECT id FROM users WHERE username = :username OR email = :email");
+            $checkStmt->execute(['username' => $username, 'email' => $email]);
+            
+            if ($checkStmt->rowCount() > 0) {
+                $error = 'Tên đăng nhập hoặc Email đã tồn tại!';
+            } else {
+                // 2. Thêm người dùng mới vào bảng `users`
+                $stmt = $pdo->prepare("INSERT INTO users (username, password, email, phone, fullname, role) VALUES (:username, :password, :email, :phone, :fullname, 'student')");
+                
+                $stmt->execute([
+                    'username' => $username,
+                    'password' => $password, // Ghi chú: Thực tế nên dùng password_hash($password, PASSWORD_BCRYPT)
+                    'email'    => $email,
+                    'phone'    => $phone,
+                    'fullname' => $fullname
+                ]);
 
-        // Đăng ký thành công, chuyển hướng sang trang hồ sơ hoặc trang đăng nhập
-        header('Location: dangnhap.php');
-        exit;
+                $user_id = $pdo->lastInsertId();
+
+                // 3. Tạo sẵn bản ghi hồ sơ học viên trong bảng `student_profiles`
+                $profileStmt = $pdo->prepare("INSERT INTO student_profiles (user_id) VALUES (:user_id)");
+                $profileStmt->execute(['user_id' => $user_id]);
+
+                // 4. Chuyển hướng sang trang đăng nhập
+                header('Location: dangnhap.php');
+                exit;
+            }
+        } catch (PDOException $e) {
+            $error = 'Lỗi hệ thống: ' . $e->getMessage();
+        }
     }
 }
 ?>

@@ -1,47 +1,59 @@
 <?php
 session_start();
+require_once 'db.php';
+
+if (!isset($pdo) && isset($conn)) { $pdo = $conn; }
+
+// --- XỬ LÝ ĐĂNG XUẤT ---
 if (isset($_GET['action']) && $_GET['action'] === 'logout') {
     session_destroy();
     header('Location: dangnhap.php');
     exit;
 }
 
-$reviews = [
-    [
-        'id' => 1,
-        'teacher' => 'Trần Lan Anh',
-        'rating' => 5,
-        'type' => 'Xuất sắc',
-        'type_class' => 'badge-excellent',
-        'time' => '16:20, 29/08/2026',
-        'content' => 'Đặt lịch rất có sát nhanh, thầy dạy đúng giờ đúng...'
-    ],
-    [
-        'id' => 2,
-        'teacher' => 'Ngô Minh Khôi',
-        'rating' => 5,
-        'type' => 'Xuất sắc',
-        'type_class' => 'badge-excellent',
-        'time' => '10:15, 30/01/2026',
-        'content' => 'Giáo viên tư vấn góp thước buổi, phong cách học lương...'
-    ],
-    [
-        'id' => 3,
-        'teacher' => 'Đỗ Hải Phương',
-        'rating' => 5,
-        'type' => 'Tốt',
-        'type_class' => 'badge-good',
-        'time' => '09:45, 28/08/2026',
-        'content' => 'Giao diện rõ dùng, lọc theo ngôn ngữ và chủ đề rất nhanh.'
-    ]
-];
+// --- XỬ LÝ CHỨC NĂNG XÓA ĐÁNH GIÁ ---
+if (isset($_POST['action']) && $_POST['action'] === 'delete' && isset($_POST['review_id'])) {
+    $review_id = (int)$_POST['review_id'];
+    if ($review_id > 0 && isset($pdo)) {
+        try {
+            $stmt_del = $pdo->prepare("DELETE FROM reviews WHERE id = ?");
+            $stmt_del->execute([$review_id]);
+        } catch (PDOException $e) {
+            // Xử lý lỗi nếu có
+        }
+    }
+    header('Location: dg-admin.php');
+    exit;
+}
 
-if (isset($_GET['delete_id'])) {
-    $deleteId = intval($_GET['delete_id']);
-    $reviews = array_filter($reviews, function($r) use ($deleteId) {
-        return $r['id'] !== $deleteId;
-    });
-    $reviews = array_values($reviews);
+// --- TRUY VẤN DANH SÁCH ĐÁNH GIÁ ---
+$reviews = [];
+if (isset($pdo)) {
+    $stmt = $pdo->query("
+        SELECT r.*, COALESCE(u.fullname, r.teacher_name, 'Giảng viên') AS display_teacher_name
+        FROM reviews r
+        LEFT JOIN appointments a ON r.appointment_id = a.appointment_id
+        LEFT JOIN time_slots ts ON a.slot_id = ts.slot_id
+        LEFT JOIN users u ON ts.lecturer_id = u.id
+        ORDER BY r.created_at DESC
+    ");
+    $reviews = $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
+$total_reviews = count($reviews);
+
+// --- TÍNH ĐIỂM TRUNG BÌNH THỰC TẾ TỪ DATABASE ---
+$avg_rating = 0;
+if (isset($pdo)) {
+    try {
+        $stmt_avg = $pdo->query("SELECT AVG(rating) as avg_score FROM reviews");
+        $row_avg = $stmt_avg->fetch(PDO::FETCH_ASSOC);
+        if ($row_avg && $row_avg['avg_score'] !== null) {
+            $avg_rating = round($row_avg['avg_score'], 1);
+        }
+    } catch (PDOException $e) {
+        $avg_rating = 5.0; 
+    }
 }
 ?>
 <!DOCTYPE html>
@@ -56,163 +68,221 @@ if (isset($_GET['delete_id'])) {
             --primary-color: #d81b60;
             --primary-light: #fdf2f5;
             --border-color: #fce4ec;
+            --text-color: #333;
         }
+
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: Arial, sans-serif; }
-        body { background-color: var(--primary-light); display: flex; flex-direction: column; min-height: 100vh; }
-        
-        .header { background-color: var(--primary-color); color: white; padding: 12px 40px; display: flex; align-items: center; justify-content: space-between; }
-        .logo-container { display: flex; align-items: center; gap: 10px; }
-        .logo-box { background: white; color: var(--primary-color); font-weight: bold; padding: 4px 8px; border-radius: 4px; font-size: 14px; }
-        
+        body { background-color: var(--primary-light); color: var(--text-color); min-height: 100vh; display: flex; flex-direction: column; }
+
+        /* --- HEADER BAR --- */
+        .header-bar {
+            background-color: var(--primary-color);
+            color: white;
+            padding: 14px 60px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            width: 100%;
+        }
+
+        .logo-section { display: flex; align-items: center; gap: 12px; }
+        .logo-box { background-color: white; color: var(--primary-color); font-weight: bold; padding: 4px 8px; border-radius: 4px; font-size: 14px; }
+        .brand-info { display: flex; flex-direction: column; }
+        .brand-name { font-weight: bold; font-size: 15px; line-height: 1.2; }
+        .brand-sub { font-size: 10px; opacity: 0.85; }
+
+        /* DROPDOWN MENU CHUẨN */
         .user-dropdown { position: relative; display: inline-block; }
-        .btn-profile { color: white; text-decoration: none; font-size: 13px; font-weight: bold; background: rgba(255, 255, 255, 0.18); padding: 7px 16px; border-radius: 20px; display: flex; align-items: center; gap: 6px; border: none; cursor: pointer; }
-        .dropdown-menu { display: none; position: absolute; right: 0; top: 110%; background-color: white; min-width: 150px; box-shadow: 0px 4px 12px rgba(0,0,0,0.15); border-radius: 8px; overflow: hidden; z-index: 1000; }
+        .user-pill { 
+            background-color: rgba(255, 255, 255, 0.18); 
+            color: white; 
+            padding: 8px 18px; 
+            border-radius: 20px; 
+            font-size: 13px; 
+            font-weight: bold; 
+            display: flex; 
+            align-items: center; 
+            gap: 8px; 
+            border: none; 
+            cursor: pointer; 
+        }
+        .dropdown-menu { 
+            display: none; 
+            position: absolute; 
+            right: 0; 
+            top: calc(100% + 8px); 
+            background-color: white; 
+            min-width: 160px; 
+            box-shadow: 0px 8px 20px rgba(0, 0, 0, 0.12); 
+            border-radius: 12px; 
+            padding: 6px 0;
+            z-index: 1000; 
+            border: 1px solid rgba(0, 0, 0, 0.05);
+        }
         .dropdown-menu.show { display: block; }
-        .dropdown-item { color: var(--primary-color); padding: 10px 16px; text-decoration: none; display: flex; align-items: center; gap: 8px; font-size: 13px; }
-        .dropdown-item:hover { background-color: var(--primary-light); }
+        .dropdown-item { 
+            color: #d81b60; 
+            padding: 10px 18px; 
+            text-decoration: none; 
+            display: flex; 
+            align-items: center; 
+            gap: 10px; 
+            font-size: 13px; 
+            font-weight: bold;
+            transition: background 0.2s;
+        }
+        .dropdown-item:hover { background-color: #fce4ec; }
 
-        .main-container { max-width: 1000px; margin: 0 auto; padding: 25px 20px 50px 20px; width: 100%; flex: 1; }
-        .nav-tabs { display: inline-flex; background: white; padding: 4px; border-radius: 30px; border: 1px solid var(--border-color); margin-bottom: 25px; }
-        .tab-btn { padding: 8px 18px; border-radius: 20px; border: none; background: transparent; color: var(--primary-color); font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; text-decoration: none; }
-        .tab-btn.main-active { background: var(--primary-color); color: white; }
+        .main-container { max-width: 1000px; margin: 25px auto; padding: 0 20px 50px 20px; width: 100%; flex: 1; }
 
-        .admin-banner { background: white; border: 1px solid var(--border-color); border-radius: 16px; padding: 20px 25px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 25px; }
-        .admin-banner-left { display: flex; align-items: center; gap: 15px; }
-        .admin-icon-box { width: 40px; height: 40px; background: var(--primary-light); color: var(--primary-color); border: 1px solid var(--border-color); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 16px; }
-        .admin-title h4 { color: var(--primary-color); font-size: 15px; margin-bottom: 3px; }
-        .admin-title p { font-size: 12px; color: var(--primary-color); opacity: 0.85; }
-        .btn-reset { background: var(--primary-color); color: white; border: none; padding: 9px 20px; border-radius: 20px; font-size: 12px; font-weight: bold; cursor: pointer; text-decoration: none; }
+        /* --- NAV TABS --- */
+        .nav-tabs-wrapper { display: flex; justify-content: flex-start; margin-bottom: 25px; }
+        .nav-tabs { display: inline-flex; background: white; padding: 4px; border-radius: 30px; border: 1px solid var(--border-color); box-shadow: 0 2px 5px rgba(0,0,0,0.02); }
+        .nav-tab { padding: 8px 22px; border-radius: 20px; border: none; background: transparent; color: var(--primary-color); font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; text-decoration: none; transition: all 0.2s ease; }
+        .nav-tab.active { background-color: var(--primary-color); color: white; }
 
-        .stats-row { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 25px; }
-        .stat-card { background: white; border: 1px solid var(--border-color); border-radius: 16px; padding: 20px 25px; display: flex; align-items: center; gap: 15px; }
-        .stat-icon { width: 45px; height: 45px; background: var(--primary-light); color: var(--primary-color); border: 1px solid var(--border-color); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 18px; }
-        .stat-info span { font-size: 12px; color: var(--primary-color); opacity: 0.85; display: block; margin-bottom: 3px; }
-        .stat-info h3 { font-size: 20px; color: var(--primary-color); font-weight: bold; }
+        .admin-banner { background-color: white; border-radius: 16px; padding: 20px 25px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border: 1px solid var(--border-color); }
+        .admin-info { display: flex; align-items: center; gap: 15px; }
+        .admin-icon { background-color: #fdf2f5; color: var(--primary-color); width: 45px; height: 45px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 20px; }
+        .admin-text h3 { font-size: 15px; color: var(--primary-color); margin-bottom: 3px; }
+        .admin-text p { font-size: 12px; color: #666; }
 
-        .table-card { background: white; border: 1px solid var(--border-color); border-radius: 16px; padding: 20px 25px; }
-        .table-card-header { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: bold; color: var(--primary-color); margin-bottom: 20px; }
-        
-        table { width: 100%; border-collapse: collapse; text-align: left; }
-        th { font-size: 12px; color: var(--primary-color); padding: 10px 12px; border-bottom: 1px solid var(--border-color); font-weight: bold; }
-        td { font-size: 12px; color: #333; padding: 14px 12px; border-bottom: 1px solid var(--border-color); vertical-align: middle; }
-        tr:last-child td { border-bottom: none; }
+        .btn-reset { background-color: var(--primary-color); color: white; border: none; padding: 8px 18px; border-radius: 20px; font-size: 12px; font-weight: bold; cursor: pointer; }
 
-        .teacher-name-cell { color: var(--primary-color); font-weight: 500; }
-        .stars-cell { color: var(--primary-color); font-size: 11px; letter-spacing: 2px; }
-        
-        .badge-type { display: inline-block; padding: 4px 12px; border-radius: 12px; font-size: 11px; font-weight: bold; text-align: center; }
-        .badge-excellent { background: #e2f0d9; color: #385723; border: 1px solid #c8e1b7; }
-        .badge-good { background: #fff2cc; color: #806000; border: 1px solid #ffe599; }
-        
-        .time-cell { color: var(--primary-color); opacity: 0.85; font-size: 11px; }
-        .content-cell { color: var(--primary-color); opacity: 0.9; font-style: italic; max-width: 280px; }
+        .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
+        .stat-card { background-color: white; border-radius: 16px; padding: 20px; display: flex; align-items: center; gap: 15px; border: 1px solid var(--border-color); }
+        .stat-icon { background-color: #fdf2f5; color: var(--primary-color); width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; }
+        .stat-title { font-size: 12px; color: var(--primary-color); margin-bottom: 2px; }
+        .stat-value { font-size: 20px; font-weight: bold; color: var(--primary-color); }
 
-        .btn-delete { background: white; color: var(--primary-color); border: 1px solid var(--border-color); padding: 5px 12px; border-radius: 15px; font-size: 11px; font-weight: bold; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 4px; }
-        .btn-delete:hover { background: var(--primary-light); }
+        .table-card { background-color: white; border-radius: 16px; padding: 25px; border: 1px solid var(--border-color); }
+        .table-title { font-size: 15px; font-weight: bold; color: var(--primary-color); margin-bottom: 15px; display: flex; align-items: center; gap: 8px; }
 
-        .footer { background-color: var(--primary-color); color: white; padding: 40px 60px; margin-top: auto; }
-        .footer-grid { max-width: 1100px; margin: 0 auto; display: grid; grid-template-columns: 1.5fr 1fr 1fr 1.2fr; gap: 30px; }
-        .footer-col h5 { font-size: 12px; text-transform: uppercase; margin-bottom: 15px; letter-spacing: 0.5px; }
-        .footer-col p { font-size: 12px; line-height: 1.6; opacity: 0.95; margin-bottom: 15px; }
-        .footer-links { list-style: none; }
-        .footer-links li { margin-bottom: 10px; }
-        .footer-links a { color: white; text-decoration: none; font-size: 12px; opacity: 0.95; }
-        .social-icons { display: flex; gap: 10px; }
-        .social-btn { width: 32px; height: 32px; background: white; color: var(--primary-color); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold; text-decoration: none; }
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; font-size: 12px; color: var(--primary-color); padding: 10px; border-bottom: 1px solid var(--border-color); }
+        td { padding: 12px 10px; font-size: 13px; border-bottom: 1px solid #f9f9f9; }
+
+        .stt-col { font-weight: bold; color: var(--primary-color); }
+        .teacher-col { color: var(--primary-color); font-weight: 500; }
+        .stars-col { color: var(--primary-color); }
+        .badge-excellent { background-color: #e8f5e9; color: #2e7d32; padding: 3px 8px; border-radius: 10px; font-size: 11px; }
+
+        .btn-delete { background-color: #fff0f3; color: var(--primary-color); border: 1px solid var(--border-color); padding: 4px 10px; border-radius: 12px; font-size: 11px; cursor: pointer; transition: all 0.2s; }
+        .btn-delete:hover { background-color: var(--primary-color); color: white; }
     </style>
 </head>
 <body>
-    <header class="header">
-        <div class="logo-container">
+
+    <!-- HEADER BAR -->
+    <div class="header-bar">
+        <div class="logo-section">
             <div class="logo-box">ABC</div>
-            <div>
-                <strong style="font-size: 15px;">EDULINGO</strong><br>
-                <small style="font-size: 10px; opacity: 0.85;">Hệ thống đặt lịch tư vấn giảng viên</small>
+            <div class="brand-info">
+                <span class="brand-name">EDULINGO</span>
+                <span class="brand-sub">Hệ thống đặt lịch tư vấn giảng viên</span>
             </div>
         </div>
         <div class="user-dropdown">
-            <button class="btn-profile" id="userMenuBtn">
+            <button class="user-pill" id="userMenuBtn">
                 <i class="fa-regular fa-user"></i> admin
             </button>
             <div class="dropdown-menu" id="userDropdown">
-                <a href="?action=logout" class="dropdown-item" style="color: #d81b60;"><i class="fa-solid fa-right-from-bracket"></i> Đăng xuất</a>
+                <a href="?action=logout" class="dropdown-item">
+                    <i class="fa-solid fa-right-from-bracket"></i> Đăng xuất
+                </a>
             </div>
         </div>
-    </header>
+    </div>
 
     <div class="main-container">
-        <div class="nav-tabs">
-            <a href="tk-admin.php" class="tab-btn"><i class="fa-solid fa-chart-pie"></i> Thống kê</a>
-            <a href="gv-admin.php" class="tab-btn"><i class="fa-regular fa-user"></i> Giảng viên</a>
-            <a href="dg-admin.php" class="tab-btn main-active"><i class="fa-regular fa-star"></i> Đánh giá</a>
+        <!-- NAV TABS -->
+        <div class="nav-tabs-wrapper">
+            <div class="nav-tabs">
+                <a href="tk-admin.php" class="nav-tab"><i class="fa-solid fa-chart-pie"></i> Thống kê</a>
+                <a href="gv-admin.php" class="nav-tab"><i class="fa-regular fa-user"></i> Giảng viên</a>
+                <a href="hv-admin.php" class="nav-tab"><i class="fa-solid fa-graduation-cap"></i> Học viên</a>
+                <a href="dg-admin.php" class="nav-tab active"><i class="fa-regular fa-star"></i> Đánh giá</a>
+            </div>
         </div>
 
         <div class="admin-banner">
-            <div class="admin-banner-left">
-                <div class="admin-icon-box"><i class="fa-regular fa-user"></i></div>
-                <div class="admin-title">
-                    <h4>Trang quản trị hệ thống Admin</h4>
+            <div class="admin-info">
+                <div class="admin-icon"><i class="fa-regular fa-user"></i></div>
+                <div class="admin-text">
+                    <h3>Trang quản trị hệ thống Admin</h3>
                     <p>Quản lý toàn bộ danh sách phản hồi, theo dõi tiến độ phản hồi và điều phối dữ liệu</p>
                 </div>
             </div>
-            <a href="#" class="btn-reset" onclick="alert('Đã reset dữ liệu hệ thống!'); return false;">Reset dữ liệu</a>
+            <button class="btn-reset">Reset dữ liệu</button>
         </div>
 
-        <div class="stats-row">
+        <div class="stats-grid">
             <div class="stat-card">
                 <div class="stat-icon"><i class="fa-regular fa-clipboard"></i></div>
-                <div class="stat-info">
-                    <span>Tổng dữ liệu</span>
-                    <h3><?= count($reviews) ?> bản ghi</h3>
+                <div>
+                    <div class="stat-title">Tổng dữ liệu</div>
+                    <div class="stat-value"><?= $total_reviews ?> bản ghi</div>
                 </div>
             </div>
             <div class="stat-card">
                 <div class="stat-icon"><i class="fa-regular fa-star"></i></div>
-                <div class="stat-info">
-                    <span>Điểm trung bình</span>
-                    <h3>4.9/5.0</h3>
+                <div>
+                    <div class="stat-title">Điểm trung bình</div>
+                    <div class="stat-value"><?= $avg_rating > 0 ? number_format($avg_rating, 1) . '/5.0' : '5.0/5.0' ?></div>
                 </div>
             </div>
         </div>
 
         <div class="table-card">
-            <div class="table-card-header">
+            <div class="table-title">
                 <i class="fa-solid fa-list"></i> Danh sách tất cả đánh giá
             </div>
+
             <table>
                 <thead>
                     <tr>
-                        <th style="width: 60px;">STT</th>
-                        <th style="width: 160px;">Giảng viên</th>
-                        <th style="width: 110px;">Đánh giá</th>
-                        <th style="width: 100px;">Phân loại</th>
-                        <th style="width: 150px;">Thời gian</th>
+                        <th>STT</th>
+                        <th>Giảng viên</th>
+                        <th>Đánh giá</th>
+                        <th>Phân loại</th>
+                        <th>Thời gian</th>
                         <th>Nội dung đánh giá</th>
-                        <th style="width: 90px; text-align: center;">Hoạt động</th>
+                        <th>Hoạt động</th>
                     </tr>
                 </thead>
                 <tbody>
-                    <?php if (count($reviews) > 0): ?>
-                        <?php foreach ($reviews as $index => $r): ?>
+                    <?php if (!empty($reviews)): ?>
+                        <?php foreach ($reviews as $index => $row): ?>
                         <tr>
-                            <td style="color: var(--primary-color); font-weight: bold;"><?= sprintf('%02d', $index + 1) ?></td>
-                            <td class="teacher-name-cell"><?= htmlspecialchars($r['teacher']) ?></td>
-                            <td class="stars-cell">
-                                <?php for($i = 0; $i < $r['rating']; $i++): ?><i class="fa-solid fa-star"></i><?php endfor; ?>
+                            <td class="stt-col"><?= sprintf("%02d", $index + 1) ?></td>
+                            <td class="teacher-col"><?= htmlspecialchars($row['display_teacher_name']) ?></td>
+                            <td class="stars-col">
+                                <?php 
+                                    $rating_val = (int)($row['rating'] ?? 5);
+                                    for ($i = 0; $i < 5; $i++) {
+                                        echo $i < $rating_val ? '<i class="fa-solid fa-star"></i>' : '<i class="fa-regular fa-star"></i>';
+                                    }
+                                ?>
                             </td>
-                            <td><span class="badge-type <?= $r['type_class'] ?>"><?= $r['type'] ?></span></td>
-                            <td class="time-cell"><?= htmlspecialchars($r['time']) ?></td>
-                            <td class="content-cell">“<?= htmlspecialchars($r['content']) ?>”</td>
-                            <td style="text-align: center;">
-                                <a href="?delete_id=<?= $r['id'] ?>" class="btn-delete" onclick="return confirm('Bạn có chắc muốn xóa đánh giá này?')">
-                                    <i class="fa-regular fa-trash-can" style="font-size: 10px;"></i> Xóa
-                                </a>
+                            <td><span class="badge-excellent"><?= htmlspecialchars($row['type'] ?? 'Xuất sắc') ?></span></td>
+                            <td><?= date('H:i, d/m/Y', strtotime($row['created_at'])) ?></td>
+                            <td style="font-style: italic;">"<?= htmlspecialchars($row['content']) ?>"</td>
+                            <td>
+                                <form method="POST" onsubmit="return confirm('Bạn có chắc chắn muốn xóa đánh giá này không?');" style="display: inline;">
+                                    <input type="hidden" name="action" value="delete">
+                                    <input type="hidden" name="review_id" value="<?= $row['id'] ?>">
+                                    <button type="submit" class="btn-delete">
+                                        <i class="fa-regular fa-trash-can"></i> Xóa
+                                    </button>
+                                </form>
                             </td>
                         </tr>
                         <?php endforeach; ?>
                     <?php else: ?>
                         <tr>
-                            <td colspan="7" style="text-align: center; padding: 30px; color: var(--primary-color);">Chưa có đánh giá nào trong hệ thống.</td>
+                            <td colspan="7" style="text-align: center; color: #888; padding: 20px;">
+                                Chưa có bản ghi đánh giá nào trong hệ thống.
+                            </td>
                         </tr>
                     <?php endif; ?>
                 </tbody>
@@ -220,47 +290,16 @@ if (isset($_GET['delete_id'])) {
         </div>
     </div>
 
-    <footer class="footer">
-        <div class="footer-grid">
-            <div class="footer-col">
-                <div class="logo-container" style="margin-bottom: 12px;">
-                    <div class="logo-box">ABC</div>
-                    <strong>EDULINGO</strong>
-                </div>
-                <p>Hệ thống đặt lịch tư vấn giảng viên ngoại ngữ, giúp sinh viên tìm và đặt buổi gặp chỉ trong vài bước</p>
-                <div class="social-icons">
-                    <a href="#" class="social-btn">FB</a>
-                    <a href="#" class="social-btn">ZL</a>
-                    <a href="#" class="social-btn"><i class="fa-regular fa-envelope"></i></a>
-                </div>
-            </div>
-            <div class="footer-col">
-                <h5>KHÁM PHÁ</h5>
-                <ul class="footer-links">
-                    <li><a href="#">Tìm giảng viên</a></li>
-                    <li><a href="#">Đánh giá</a></li>
-                    <li><a href="#">Ngôn ngữ hỗ trợ</a></li>
-                    <li><a href="#">Câu hỏi thường gặp</a></li>
-                </ul>
-            </div>
-            <div class="footer-col">
-                <h5>DÀNH CHO GIẢNG VIÊN</h5>
-                <ul class="footer-links">
-                    <li><a href="#">Đăng ký giảng dạy</a></li>
-                    <li><a href="#">Quản lý khung giờ</a></li>
-                </ul>
-            </div>
-            <div class="footer-col">
-                <h5>NHẬN THÔNG BÁO</h5>
-                <p>Nhận tin khi có giảng viên mới hoặc khung giờ mới mở</p>
-            </div>
-        </div>
-    </footer>
     <script>
         const userMenuBtn = document.getElementById('userMenuBtn');
         const userDropdown = document.getElementById('userDropdown');
-        userMenuBtn.addEventListener('click', (e) => { e.stopPropagation(); userDropdown.classList.toggle('show'); });
-        document.addEventListener('click', () => { userDropdown.classList.remove('show'); });
+        userMenuBtn.addEventListener('click', (e) => { 
+            e.stopPropagation(); 
+            userDropdown.classList.toggle('show'); 
+        });
+        document.addEventListener('click', () => { 
+            userDropdown.classList.remove('show'); 
+        });
     </script>
 </body>
 </html>

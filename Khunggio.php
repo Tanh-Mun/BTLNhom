@@ -1,46 +1,44 @@
 <?php
-// Dữ liệu mẫu danh sách khung giờ
-$time_slots = [
-    [
-        'time' => 'T2, 24/08 · 08:00–09:00',
-        'type' => 'online',
-        'location' => 'Trực tuyến',
-        'booked' => 1,
-        'total' => 1,
-        'status_color' => '#d81b60'
-    ],
-    [
-        'time' => 'T2, 24/08 · 10:00–11:00',
-        'type' => 'online',
-        'location' => 'Trực tuyến',
-        'booked' => 1,
-        'total' => 1,
-        'status_color' => '#d81b60'
-    ],
-    [
-        'time' => 'T4, 26/08 · 13:30–14:30',
-        'type' => 'offline',
-        'location' => 'Phòng A204',
-        'booked' => 1,
-        'total' => 2,
-        'status_color' => '#2e7d32'
-    ],
-    [
-        'time' => 'T5, 27/08 · 15:30–16:30',
-        'type' => 'offline',
-        'location' => 'Phòng B301',
-        'booked' => 0,
-        'total' => 1,
-        'status_color' => '#2e7d32'
-    ]
-];
+session_start();
+require_once 'db.php';
 
-$selected_lecturer = 'Nguyễn Thảo Vy';
+if (!isset($pdo) && isset($conn)) { $pdo = $conn; }
 
-// Lấy chữ cái đầu tiên của tên (dùng hàm thuần PHP)
+$lecturer_id = $_SESSION['user_id'] ?? 1;
+
+// Xử lý khi Giảng viên bấm "Tạo khung giờ mới"
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'add_slot') {
+    $topic = trim($_POST['topic']);
+    $start_time = $_POST['start_time'];
+    $end_time = $_POST['end_time'];
+    $location = trim($_POST['location'] ?? 'Online - Zoom');
+
+    if (!empty($topic) && !empty($start_time) && !empty($end_time)) {
+        $stmt = $pdo->prepare("INSERT INTO time_slots (lecturer_id, topic, start_time, end_time, location, status) VALUES (?, ?, ?, ?, ?, 'available')");
+        $stmt->execute([$lecturer_id, $topic, $start_time, $end_time, $location]);
+        
+        header('Location: Khunggio.php?status=success');
+        exit;
+    }
+}
+
+// Xử lý Xóa khung giờ
+if (isset($_GET['delete_slot_id'])) {
+    $slot_id = (int)$_GET['delete_slot_id'];
+    $stmt = $pdo->prepare("DELETE FROM time_slots WHERE slot_id = ? AND lecturer_id = ?");
+    $stmt->execute([$slot_id, $lecturer_id]);
+    header('Location: Khunggio.php');
+    exit;
+}
+
+// Lấy danh sách khung giờ
+$stmt = $pdo->prepare("SELECT * FROM time_slots WHERE lecturer_id = ? ORDER BY start_time ASC");
+$stmt->execute([$lecturer_id]);
+$time_slots = $stmt->fetchAll();
+
+$selected_lecturer = $_SESSION['user_name'] ?? 'Nguyễn Thảo Vy';
 $name_parts = explode(' ', trim($selected_lecturer));
-$last_word = end($name_parts);
-$avatar_letter = strtoupper(substr($last_word, 0, 1));
+$avatar_letter = strtoupper(substr(end($name_parts), 0, 1));
 ?>
 
 <!DOCTYPE html>
@@ -48,136 +46,73 @@ $avatar_letter = strtoupper(substr($last_word, 0, 1));
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Khung giờ - Giảng viên</title>
+    <title>Quản Lý Khung Giờ - EDULINGO</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        :root {
-            --primary-color: #d81b60;
-            --primary-light: #fdf2f5;
-            --border-color: #fce4ec;
+        :root { 
+            --primary-color: #d81b60; 
+            --primary-light: #fdf2f5; 
+            --border-color: #f8bbd0; 
         }
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-        body { background-color: var(--primary-light); color: #333; }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Arial, sans-serif; }
+        body { background-color: var(--primary-light); color: #333; min-height: 100vh; display: flex; flex-direction: column; }
         
-        /* Header */
-        .header { 
-            background-color: var(--primary-color); 
-            color: white; 
-            padding: 15px 40px; 
-            display: flex; 
-            align-items: center; 
-            justify-content: space-between; 
-        }
-        .header-brand {
-            display: flex;
-            align-items: center;
-            gap: 15px;
-        }
+        /* HEADER */
+        .header { background-color: var(--primary-color); color: white; padding: 15px 40px; display: flex; align-items: center; justify-content: space-between; }
+        .header-brand { display: flex; align-items: center; gap: 15px; }
         .logo-box { background: white; color: var(--primary-color); font-weight: bold; padding: 8px 12px; border-radius: 6px; font-size: 14px; }
-        .header-text h2 { font-size: 18px; text-transform: uppercase; letter-spacing: 1px; }
+        .header-text h2 { font-size: 18px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 2px; }
         .header-text p { font-size: 13px; opacity: 0.9; }
 
-        /* Dropdown cho Avatar ở góc trên bên phải */
+        /* USER DROPDOWN MENU */
         .user-dropdown { position: relative; display: inline-block; }
-        .user-profile-icon {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            text-decoration: none;
-            color: white;
-            background-color: rgba(255, 255, 255, 0.15);
-            padding: 6px 14px 6px 8px;
-            border-radius: 25px;
-            transition: all 0.2s ease;
-            border: 1px solid rgba(255, 255, 255, 0.3);
-            cursor: pointer;
-        }
-        .user-profile-icon:hover {
-            background-color: rgba(255, 255, 255, 0.25);
-        }
-        .avatar-circle {
-            width: 34px;
-            height: 34px;
-            background-color: white;
-            color: var(--primary-color);
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: bold;
-            font-size: 15px;
-        }
-        .user-name {
-            font-size: 14px;
-            font-weight: 600;
-        }
+        .user-profile-icon { display: flex; align-items: center; gap: 10px; color: white; background-color: rgba(255, 255, 255, 0.15); padding: 6px 16px 6px 6px; border-radius: 25px; border: 1px solid rgba(255, 255, 255, 0.3); cursor: pointer; text-decoration: none; user-select: none; }
+        .avatar-circle { width: 34px; height: 34px; background-color: white; color: var(--primary-color); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 15px; }
         
-        /* Menu Boxlist thả xuống từ avatar */
-        .dropdown-menu { 
-            display: none; 
-            position: absolute; 
-            right: 0; 
-            top: 115%; 
-            background-color: white; 
-            min-width: 170px; 
-            box-shadow: 0px 4px 12px rgba(0,0,0,0.15); 
-            border-radius: 8px; 
-            overflow: hidden; 
-            z-index: 1000; 
-            border: 1px solid var(--border-color);
-        }
+        .dropdown-menu { display: none; position: absolute; right: 0; top: calc(100% + 8px); background-color: white; min-width: 170px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15); padding: 8px 0; z-index: 1000; border: 1px solid var(--border-color); }
         .dropdown-menu.show { display: block; }
-        .dropdown-item { 
-            color: var(--primary-color); 
-            padding: 10px 16px; 
-            text-decoration: none; 
-            display: flex; 
-            align-items: center; 
-            gap: 10px; 
-            font-size: 13px; 
-            font-weight: 500;
-        }
-        .dropdown-item:hover { background-color: var(--primary-light); }
+        .dropdown-item { display: flex; align-items: center; gap: 10px; padding: 10px 18px; color: var(--primary-color); text-decoration: none; font-size: 14px; font-weight: 600; transition: background 0.2s; }
+        .dropdown-item:hover { background-color: #fce4ec; }
+        .dropdown-item i { font-size: 16px; width: 18px; text-align: center; }
 
-        /* Main Container */
-        .container { max-width: 1000px; margin: 25px auto; padding: 0 20px; }
-
-        /* Navigation Tabs đồng bộ */
+        /* CONTAINER & TABS */
+        .container { max-width: 1000px; margin: 25px auto; padding: 0 20px; width: 100%; flex: 1; }
         .nav-tabs { display: inline-flex; background: white; padding: 4px; border-radius: 30px; border: 1px solid var(--border-color); margin-bottom: 25px; }
         .tab-btn { padding: 8px 18px; border-radius: 20px; border: none; background: transparent; color: var(--primary-color); font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; text-decoration: none; }
         .tab-btn.active { background: var(--primary-color); color: white; }
 
-        /* Add Button */
-        .action-bar { display: flex; justify-content: flex-end; margin-bottom: 15px; }
-        .btn-add { background-color: var(--primary-color); color: white; border: none; padding: 10px 20px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 14px; }
+        /* FORM */
+        .card-form { background: white; padding: 20px 24px; border-radius: 12px; border: 1px solid var(--border-color); margin-bottom: 25px; }
+        .card-form h3 { color: var(--primary-color); font-size: 16px; margin-bottom: 12px; }
+        .form-grid { display: grid; grid-template-columns: 2fr 1.5fr 1.5fr 1fr; gap: 12px; }
+        .form-group label { display: block; font-size: 12px; font-weight: bold; margin-bottom: 5px; color: #555; }
+        .form-group input { width: 100%; padding: 8px 12px; border: 1px solid #f48fb1; border-radius: 6px; outline: none; font-size: 13px; }
+        .form-group input:focus { border-color: var(--primary-color); }
+        .btn-submit { background: var(--primary-color); color: white; border: none; padding: 8px 15px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 13px; transition: opacity 0.2s; }
+        .btn-submit:hover { opacity: 0.9; }
 
-        /* Time Slot Cards */
-        .slot-card { background: white; border: 1px solid #f8bbd0; border-radius: 12px; padding: 18px 24px; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center; }
-        .slot-info { display: flex; align-items: center; gap: 30px; }
-        .slot-time { color: var(--primary-color); font-weight: bold; font-size: 15px; width: 200px; }
-        .slot-location { color: #f48fb1; font-size: 14px; display: flex; align-items: center; gap: 6px; width: 140px; }
-        .slot-location.offline { color: #ab47bc; }
-        .slot-booked { font-weight: bold; font-size: 14px; }
+        /* CARDS */
+        .slot-card { background: white; border: 1px solid var(--border-color); border-radius: 12px; padding: 18px 24px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }
+        .slot-card h4 { color: #c2185b; font-size: 16px; margin-bottom: 4px; }
+        .badge { padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: bold; }
+        .badge-available { background: #e8f5e9; color: #2e7d32; }
+        .badge-booked { background: #ffebee; color: #c62828; }
+        .btn-delete { color: #d32f2f; text-decoration: none; font-size: 13px; font-weight: bold; display: flex; align-items: center; gap: 4px; }
 
-        /* Action Buttons */
-        .slot-actions { display: flex; gap: 10px; }
-        .btn-edit { border: 1px solid #f48fb1; background: white; color: var(--primary-color); padding: 6px 16px; border-radius: 6px; font-size: 13px; cursor: pointer; }
-        .btn-delete { border: 1px solid #e0e0e0; background: white; color: #888; padding: 6px 12px; border-radius: 6px; font-size: 13px; cursor: pointer; }
-
-        /* Footer */
-        .footer { background-color: var(--primary-color); color: white; padding: 40px; margin-top: 50px; display: grid; grid-template-columns: 2fr 1fr 1fr 1.5fr; gap: 30px; }
-        .footer-logo { display: flex; align-items: center; gap: 10px; margin-bottom: 15px; }
-        .footer-logo .logo-box { color: var(--primary-color); }
-        .footer p { font-size: 13px; line-height: 1.5; opacity: 0.9; }
-        .footer h4 { font-size: 13px; font-style: italic; margin-bottom: 15px; text-transform: uppercase; }
-        .footer ul { list-style: none; }
-        .footer ul li { margin-bottom: 10px; font-size: 13px; opacity: 0.9; cursor: pointer; }
-        .social-icons { display: flex; gap: 10px; margin-top: 15px; }
-        .social-icon { width: 30px; height: 30px; background: white; color: var(--primary-color); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 12px; }
+        /* FOOTER */
+        .footer { background-color: var(--primary-color); color: white; padding: 40px 60px; margin-top: 40px; }
+        .footer-grid { max-width: 1000px; margin: 0 auto; display: grid; grid-template-columns: 1.5fr 1fr 1fr 1.2fr; gap: 30px; }
+        .footer-col h5 { font-size: 12px; text-transform: uppercase; margin-bottom: 15px; letter-spacing: 0.5px; }
+        .footer-col p { font-size: 12px; line-height: 1.6; opacity: 0.95; margin-bottom: 15px; }
+        .footer-links { list-style: none; }
+        .footer-links li { margin-bottom: 10px; }
+        .footer-links a { color: white; text-decoration: none; font-size: 12px; opacity: 0.95; }
+        .social-icons { display: flex; gap: 10px; }
+        .social-btn { width: 32px; height: 32px; background: white; color: var(--primary-color); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold; text-decoration: none; }
     </style>
 </head>
 <body>
-
+    <!-- HEADER -->
     <div class="header">
         <div class="header-brand">
             <div class="logo-box">ABC</div>
@@ -186,99 +121,124 @@ $avatar_letter = strtoupper(substr($last_word, 0, 1));
                 <p>Hệ thống đặt lịch tư vấn giảng viên</p>
             </div>
         </div>
-
-        <!-- Avatar kết hợp boxlist dropdown -->
         <div class="user-dropdown">
-            <div class="user-profile-icon" id="userMenuBtn" title="Tùy chọn tài khoản">
+            <div class="user-profile-icon" id="userMenuBtn">
                 <div class="avatar-circle"><?= htmlspecialchars($avatar_letter) ?></div>
-                <span class="user-name"><?= htmlspecialchars($selected_lecturer) ?></span>
+                <span style="font-size: 14px; font-weight: 600;"><?= htmlspecialchars($selected_lecturer) ?></span>
             </div>
             <div class="dropdown-menu" id="userDropdown">
                 <a href="Hoso.php" class="dropdown-item"><i class="fa-regular fa-id-card"></i> Xem hồ sơ</a>
-                <a href="dangnhap.php" class="dropdown-item" style="color: #d81b60;"><i class="fa-solid fa-right-from-bracket"></i> Đăng xuất</a>
+                <a href="dangnhap.php" class="dropdown-item"><i class="fa-solid fa-right-from-bracket"></i> Đăng xuất</a>
             </div>
         </div>
     </div>
 
+    <!-- MAIN CONTAINER -->
     <div class="container">
-        <!-- Navigation Tabs (Đã bỏ Hồ sơ) -->
+        <!-- TABS -->
         <div class="nav-tabs">
             <a href="Cuochen.php" class="tab-btn"><i class="fa-regular fa-calendar-check"></i> Cuộc hẹn</a>
             <a href="Khunggio.php" class="tab-btn active"><i class="fa-regular fa-clock"></i> Khung giờ</a>
-            <a href="LichTuan.php" class="tab-btn"><i class="fa-solid fa-calendar-days"></i> Lịch tuần</a>
+            <a href="Lichtuan.php" class="tab-btn"><i class="fa-regular fa-calendar-days"></i> Lịch tuần</a>
             <a href="DanhSachCho.php" class="tab-btn"><i class="fa-solid fa-users"></i> Danh sách chờ</a>
         </div>
 
-        <div class="action-bar">
-            <button class="btn-add">+ Thêm khung giờ</button>
-        </div>
-
-        <?php foreach ($time_slots as $slot): ?>
-            <div class="slot-card">
-                <div class="slot-info">
-                    <div class="slot-time"><?= htmlspecialchars($slot['time']) ?></div>
-                    <div class="slot-location <?= $slot['type'] === 'offline' ? 'offline' : '' ?>">
-                        <?= $slot['type'] === 'online' ? '📹' : '📍' ?> <?= htmlspecialchars($slot['location']) ?>
+        <!-- FORM TẠO KHUNG GIỜ -->
+        <div class="card-form">
+            <h3>Mở khung giờ tư vấn mới</h3>
+            <form method="POST">
+                <input type="hidden" name="action" value="add_slot">
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>Chủ đề tư vấn</label>
+                        <input type="text" name="topic" placeholder="Ví dụ: Sửa bài Writing Task 2" required>
                     </div>
-                    <div class="slot-booked" style="color: <?= $slot['status_color'] ?>;">
-                        <?= $slot['booked'] ?>/<?= $slot['total'] ?> đã đặt
+                    <div class="form-group">
+                        <label>Thời gian bắt đầu</label>
+                        <input type="datetime-local" name="start_time" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Thời gian kết thúc</label>
+                        <input type="datetime-local" name="end_time" required>
+                    </div>
+                    <div style="display: flex; align-items: flex-end;">
+                        <button type="submit" class="btn-submit" style="width: 100%; height: 35px;"><i class="fa-solid fa-plus"></i> Thêm giờ</button>
                     </div>
                 </div>
-                <div class="slot-actions">
-                    <button class="btn-edit">Sửa</button>
-                    <button class="btn-delete">🗑</button>
+            </form>
+        </div>
+
+        <!-- DANH SÁCH KHUNG GIỜ -->
+        <h3 style="color: var(--primary-color); font-size: 16px; margin-bottom: 15px;">Khung giờ đã tạo</h3>
+        <?php if (empty($time_slots)): ?>
+            <div style="background: white; padding: 25px; border-radius: 12px; text-align: center; color: #777; border: 1px solid var(--border-color);">Chưa có khung giờ nào được mở.</div>
+        <?php else: ?>
+            <?php foreach ($time_slots as $slot): ?>
+                <div class="slot-card">
+                    <div>
+                        <h4><?= htmlspecialchars($slot['topic']) ?></h4>
+                        <div style="font-size: 13px; color: #888; margin-top: 4px;">
+                            <i class="fa-regular fa-clock"></i> 
+                            <?= date('d/m/Y H:i', strtotime($slot['start_time'])) ?> - <?= date('H:i', strtotime($slot['end_time'])) ?>
+                        </div>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 15px;">
+                        <?php if ($slot['status'] === 'available'): ?>
+                            <span class="badge badge-available">Đang mở</span>
+                        <?php else: ?>
+                            <span class="badge badge-booked">Đã có học viên đặt</span>
+                        <?php endif; ?>
+                        
+                        <a href="Khunggio.php?delete_slot_id=<?= $slot['slot_id'] ?>" class="btn-delete" onclick="return confirm('Bạn có chắc chắn muốn xóa khung giờ này?');"><i class="fa-regular fa-trash-can"></i> Xóa</a>
+                    </div>
                 </div>
-            </div>
-        <?php endforeach; ?>
+            <?php endforeach; ?>
+        <?php endif; ?>
     </div>
 
-    <div class="footer">
-        <div>
-            <div class="footer-logo">
-                <div class="logo-box">ABC</div>
-                <strong>EDULINGO</strong>
+    <!-- FOOTER -->
+    <footer class="footer">
+        <div class="footer-grid">
+            <div class="footer-col">
+                <div class="header-brand" style="margin-bottom: 12px;">
+                    <div class="logo-box">ABC</div>
+                    <span style="font-weight: bold; font-size: 16px;">EDULINGO</span>
+                </div>
+                <p>Hệ thống đặt lịch tư vấn giảng viên ngoại ngữ, giúp sinh viên tìm và đặt buổi gặp chỉ trong vài bước</p>
+                <div class="social-icons">
+                    <a href="#" class="social-btn">FB</a>
+                    <a href="#" class="social-btn">ZL</a>
+                    <a href="#" class="social-btn"><i class="fa-regular fa-envelope"></i></a>
+                </div>
             </div>
-            <p>Hệ thống đặt lịch tư vấn ngoại ngữ, giúp sinh viên tìm và đặt buổi gặp chỉ trong vài bước</p>
-            <div class="social-icons">
-                <div class="social-icon">FB</div>
-                <div class="social-icon">ZL</div>
-                <div class="social-icon">✉</div>
+            <div class="footer-col">
+                <h5>KHÁM PHÁ</h5>
+                <ul class="footer-links">
+                    <li><a href="timvadatlich.php">Tìm giảng viên</a></li>
+                    <li><a href="danhgia.php">Đánh giá</a></li>
+                    <li><a href="#">Ngôn ngữ hỗ trợ</a></li>
+                    <li><a href="#">Câu hỏi thường gặp</a></li>
+                </ul>
+            </div>
+            <div class="footer-col">
+                <h5>DÀNH CHO GIẢNG VIÊN</h5>
+                <ul class="footer-links">
+                    <li><a href="#">Đăng ký giảng dạy</a></li>
+                    <li><a href="#">Quản lý khung giờ</a></li>
+                </ul>
+            </div>
+            <div class="footer-col">
+                <h5>NHẬN THÔNG BÁO</h5>
+                <p>Nhận tin khi có giảng viên mới hoặc khung giờ mới mở</p>
             </div>
         </div>
-        <div>
-            <h4>KHÁM PHÁ</h4>
-            <ul>
-                <li>Tìm giảng viên</li>
-                <li>Đánh giá</li>
-                <li>Ngôn ngữ hỗ trợ</li>
-                <li>Câu hỏi thường gặp</li>
-            </ul>
-        </div>
-        <div>
-            <h4>DÀNH CHO GIẢNG VIÊN</h4>
-            <ul>
-                <li>Đăng ký giảng dạy</li>
-                <li>Quản lý khung giờ</li>
-            </ul>
-        </div>
-        <div>
-            <h4>NHẬN THÔNG BÁO</h4>
-            <p>Nhận tin khi có giảng viên mới hoặc khung giờ mới mở</p>
-        </div>
-    </div>
+    </footer>
 
     <script>
         const userMenuBtn = document.getElementById('userMenuBtn');
         const userDropdown = document.getElementById('userDropdown');
-        
-        userMenuBtn.addEventListener('click', (e) => { 
-            e.stopPropagation(); 
-            userDropdown.classList.toggle('show'); 
-        });
-        
-        document.addEventListener('click', () => { 
-            userDropdown.classList.remove('show'); 
-        });
+        userMenuBtn.addEventListener('click', (e) => { e.stopPropagation(); userDropdown.classList.toggle('show'); });
+        document.addEventListener('click', () => { userDropdown.classList.remove('show'); });
     </script>
 </body>
 </html>

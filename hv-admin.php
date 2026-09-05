@@ -11,61 +11,47 @@ if (isset($_GET['action']) && $_GET['action'] === 'logout') {
     exit;
 }
 
-// Kiểm tra xem các cột trong lecturer_profiles có tồn tại hay không
-$has_faculty = false;
-$has_specialty = false;
-$has_bio = false;
-
-try {
-    $cols = $pdo->query("DESCRIBE lecturer_profiles")->fetchAll(PDO::FETCH_COLUMN);
-    if (in_array('faculty', $cols) || in_array('department', $cols)) {
-        $faculty_col = in_array('faculty', $cols) ? 'faculty' : 'department';
-        $has_faculty = true;
-    }
-    if (in_array('specialty', $cols)) { $has_specialty = true; }
-    if (in_array('bio', $cols)) { $has_bio = true; }
-} catch (Exception $e) {
-    // Bảng chưa tồn tại
-}
-
 $msg = '';
 $msg_type = 'success';
 
-// 1. XỬ LÝ THÊM, SỬA HOẶC XÓA GIẢNG VIÊN (DATABASE)
+// 1. XỬ LÝ THÊM, SỬA HOẶC XÓA HỌC VIÊN
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     $action = $_POST['action'];
 
-    // --- XÓA GIẢNG VIÊN ---
-    if ($action === 'delete_lecturer') {
-        $lecturer_id = intval($_POST['lecturer_id']);
+    // --- XÓA HỌC VIÊN ---
+    if ($action === 'delete_student') {
+        $student_id = intval($_POST['student_id']);
         try {
             $pdo->beginTransaction();
 
-            $stmtProfile = $pdo->prepare("DELETE FROM lecturer_profiles WHERE user_id = ?");
-            $stmtProfile->execute([$lecturer_id]);
+            // Xóa thông tin chi tiết ở bảng student_profiles trước
+            $stmtProf = $pdo->prepare("DELETE FROM student_profiles WHERE user_id = ?");
+            $stmtProf->execute([$student_id]);
 
+            // Xóa tài khoản ở bảng users
             $stmtUser = $pdo->prepare("DELETE FROM users WHERE id = ?");
-            $stmtUser->execute([$lecturer_id]);
+            $stmtUser->execute([$student_id]);
 
             $pdo->commit();
-            $msg = "Đã xóa giảng viên thành công!";
+            $msg = "Đã xóa học viên thành công!";
         } catch (Exception $e) {
             $pdo->rollBack();
-            $msg = "Lỗi khi xóa giảng viên: " . $e->getMessage();
+            $msg = "Lỗi khi xóa học viên: " . $e->getMessage();
             $msg_type = 'danger';
         }
     }
 
-    // --- THÊM GIẢNG VIÊN MỚI ---
-    elseif ($action === 'add_lecturer') {
-        $fullname  = trim($_POST['fullname']);
-        $username  = trim($_POST['username']);
-        $email     = trim($_POST['email']);
-        $phone     = trim($_POST['phone']);
-        $faculty   = trim($_POST['faculty']);
-        $specialty = trim($_POST['specialty']);
-        $bio       = trim($_POST['bio']);
-        $password  = !empty($_POST['password']) ? md5(trim($_POST['password'])) : md5('123456');
+    // --- THÊM HỌC VIÊN MỚI ---
+    elseif ($action === 'add_student') {
+        $fullname     = trim($_POST['fullname']);
+        $username     = trim($_POST['username']);
+        $email        = trim($_POST['email']);
+        $phone        = trim($_POST['phone']);
+        $student_code = trim($_POST['student_code']);
+        $faculty      = trim($_POST['faculty']);
+        $major        = trim($_POST['major']);
+        $bio          = trim($_POST['bio']);
+        $password     = !empty($_POST['password']) ? md5(trim($_POST['password'])) : md5('123456');
 
         try {
             $pdo->beginTransaction();
@@ -77,25 +63,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 throw new Exception("Tên đăng nhập hoặc Email này đã tồn tại trong hệ thống!");
             }
 
-            // Thêm vào bảng users kèm username
-            $stmtUser = $pdo->prepare("INSERT INTO users (fullname, username, email, phone, password, role) VALUES (?, ?, ?, ?, ?, 'lecturer')");
+            // 1. Thêm vào bảng users
+            $stmtUser = $pdo->prepare("INSERT INTO users (fullname, username, email, phone, password, role) VALUES (?, ?, ?, ?, ?, 'student')");
             $stmtUser->execute([$fullname, $username, $email, $phone, $password]);
             $new_user_id = $pdo->lastInsertId();
 
-            $insertCols = ['user_id'];
-            $insertVals = [$new_user_id];
-
-            if ($has_faculty) { $insertCols[] = $faculty_col; $insertVals[] = $faculty; }
-            if ($has_specialty) { $insertCols[] = 'specialty'; $insertVals[] = $specialty; }
-            if ($has_bio) { $insertCols[] = 'bio'; $insertVals[] = $bio; }
-
-            $placeholders = implode(',', array_fill(0, count($insertCols), '?'));
-            $sqlProfile = "INSERT INTO lecturer_profiles (" . implode(',', $insertCols) . ") VALUES ($placeholders)";
-            $stmtProfile = $pdo->prepare($sqlProfile);
-            $stmtProfile->execute($insertVals);
+            // 2. Thêm vào bảng student_profiles
+            $stmtProf = $pdo->prepare("INSERT INTO student_profiles (user_id, student_code, faculty, major, bio) VALUES (?, ?, ?, ?, ?)");
+            $stmtProf->execute([$new_user_id, $student_code, $faculty, $major, $bio]);
 
             $pdo->commit();
-            $msg = "Thêm giảng viên mới thành công!";
+            $msg = "Thêm học viên mới thành công!";
         } catch (Exception $e) {
             $pdo->rollBack();
             $msg = "Lỗi: " . $e->getMessage();
@@ -103,53 +81,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         }
     }
 
-    // --- CẬP NHẬT HỒ SƠ GIẢNG VIÊN ---
-    elseif ($action === 'update_lecturer') {
-        $lecturer_id = intval($_POST['lecturer_id']);
-        $fullname    = trim($_POST['fullname']);
-        $username    = trim($_POST['username']);
-        $email       = trim($_POST['email']);
-        $phone       = trim($_POST['phone']);
-        $faculty     = trim($_POST['faculty']);
-        $specialty   = trim($_POST['specialty']);
-        $bio         = trim($_POST['bio']);
+    // --- CẬP NHẬT TÀI KHOẢN HỌC VIÊN ---
+    elseif ($action === 'update_student') {
+        $student_id   = intval($_POST['student_id']);
+        $fullname     = trim($_POST['fullname']);
+        $username     = trim($_POST['username']);
+        $email        = trim($_POST['email']);
+        $phone        = trim($_POST['phone']);
+        $student_code = trim($_POST['student_code']);
+        $faculty      = trim($_POST['faculty']);
+        $major        = trim($_POST['major']);
+        $bio          = trim($_POST['bio']);
 
         try {
             $pdo->beginTransaction();
 
-            // Cập nhật thông tin tài khoản bao gồm username
+            // 1. Cập nhật bảng users
             $stmtUser = $pdo->prepare("UPDATE users SET fullname = ?, username = ?, email = ?, phone = ? WHERE id = ?");
-            $stmtUser->execute([$fullname, $username, $email, $phone, $lecturer_id]);
+            $stmtUser->execute([$fullname, $username, $email, $phone, $student_id]);
 
-            $stmtCheck = $pdo->prepare("SELECT id FROM lecturer_profiles WHERE user_id = ?");
-            $stmtCheck->execute([$lecturer_id]);
-            $exists = $stmtCheck->fetch();
-
-            $updateFields = [];
-            $updateParams = [];
-
-            if ($has_faculty) { $updateFields[] = "$faculty_col = ?"; $updateParams[] = $faculty; }
-            if ($has_specialty) { $updateFields[] = "specialty = ?"; $updateParams[] = $specialty; }
-            if ($has_bio) { $updateFields[] = "bio = ?"; $updateParams[] = $bio; }
-
-            if (!empty($updateFields)) {
-                if ($exists) {
-                    $sqlProfile = "UPDATE lecturer_profiles SET " . implode(', ', $updateFields) . " WHERE user_id = ?";
-                    $updateParams[] = $lecturer_id;
-                    $stmtProfile = $pdo->prepare($sqlProfile);
-                    $stmtProfile->execute($updateParams);
-                } else {
-                    $colsInsert = array_merge(['user_id'], array_map(function($f) { return explode(' =', $f)[0]; }, $updateFields));
-                    $placeholders = array_fill(0, count($colsInsert), '?');
-                    $sqlProfile = "INSERT INTO lecturer_profiles (" . implode(', ', $colsInsert) . ") VALUES (" . implode(', ', $placeholders) . ")";
-                    array_unshift($updateParams, $lecturer_id);
-                    $stmtProfile = $pdo->prepare($sqlProfile);
-                    $stmtProfile->execute($updateParams);
-                }
+            // 2. Cập nhật/Chèn mới bảng student_profiles
+            $stmtCheckProf = $pdo->prepare("SELECT id FROM student_profiles WHERE user_id = ?");
+            $stmtCheckProf->execute([$student_id]);
+            
+            if ($stmtCheckProf->fetch()) {
+                $stmtProf = $pdo->prepare("UPDATE student_profiles SET student_code = ?, faculty = ?, major = ?, bio = ? WHERE user_id = ?");
+                $stmtProf->execute([$student_code, $faculty, $major, $bio, $student_id]);
+            } else {
+                $stmtProf = $pdo->prepare("INSERT INTO student_profiles (user_id, student_code, faculty, major, bio) VALUES (?, ?, ?, ?, ?)");
+                $stmtProf->execute([$student_id, $student_code, $faculty, $major, $bio]);
             }
 
             $pdo->commit();
-            $msg = "Cập nhật hồ sơ giảng viên thành công!";
+            $msg = "Cập nhật thông tin học viên thành công!";
         } catch (Exception $e) {
             $pdo->rollBack();
             $msg = "Lỗi khi cập nhật: " . $e->getMessage();
@@ -158,31 +122,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     }
 }
 
-// 2. TRUY VẤN DANH SÁCH GIẢNG VIÊN TỪ DATABASE
+// 2. TRUY VẤN DANH SÁCH HỌC VIÊN KÈM THEO HỒ SƠ TỪ DATABASE
 $searchKeyword = isset($_GET['keyword']) ? trim($_GET['keyword']) : '';
 
-$selectFaculty   = $has_faculty ? "lp.$faculty_col AS dept" : "NULL AS dept";
-$selectSpecialty = $has_specialty ? "lp.specialty AS desc_text" : "NULL AS desc_text";
-$selectBio       = $has_bio ? "lp.bio AS intro" : "NULL AS intro";
-
-$sql = "SELECT 
-            u.id, 
-            u.fullname AS name, 
-            u.username,
-            u.email, 
-            u.phone, 
-            $selectFaculty, 
-            $selectSpecialty, 
-            $selectBio
+$sql = "SELECT u.id, u.fullname AS name, u.username, u.email, u.phone,
+               sp.student_code, sp.faculty, sp.major, sp.bio
         FROM users u
-        LEFT JOIN lecturer_profiles lp ON u.id = lp.user_id
-        WHERE u.role = 'lecturer' OR u.role = 'teacher' OR u.role = 'gv'";
+        LEFT JOIN student_profiles sp ON u.id = sp.user_id
+        WHERE u.role = 'student' OR u.role = 'hocvien' OR u.role = 'user'";
 
 if ($searchKeyword !== '') {
-    $whereSearch = ["u.fullname LIKE :kw", "u.username LIKE :kw"];
-    if ($has_faculty) { $whereSearch[] = "lp.$faculty_col LIKE :kw"; }
-    if ($has_specialty) { $whereSearch[] = "lp.specialty LIKE :kw"; }
-    $sql .= " AND (" . implode(" OR ", $whereSearch) . ")";
+    $sql .= " AND (u.fullname LIKE :kw OR u.username LIKE :kw OR u.email LIKE :kw OR u.phone LIKE :kw OR sp.student_code LIKE :kw)";
 }
 
 $stmt = $pdo->prepare($sql);
@@ -190,32 +140,31 @@ if ($searchKeyword !== '') {
     $stmt->bindValue(':kw', '%' . $searchKeyword . '%');
 }
 $stmt->execute();
-$teachers_db = $stmt->fetchAll(PDO::FETCH_ASSOC);
+$students_db = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-$teachers = [];
-foreach ($teachers_db as $t) {
-    $firstChar = !empty($t['name']) ? mb_strtoupper(mb_substr($t['name'], 0, 1, 'UTF-8'), 'UTF-8') : 'G';
-    $teachers[] = [
-        'id'       => $t['id'],
-        'name'     => $t['name'] ?? '',
-        'username' => $t['username'] ?? '',
-        'avatar'   => $firstChar,
-        'dept'     => $t['dept'] ?? 'Chưa cập nhật',
-        'email'    => $t['email'] ?? '',
-        'phone'    => $t['phone'] ?? '',
-        'desc'     => $t['desc_text'] ?? 'Chưa cập nhật chuyên môn',
-        'intro'    => $t['intro'] ?? ''
+$students = [];
+foreach ($students_db as $s) {
+    $firstChar = !empty($s['name']) ? mb_strtoupper(mb_substr($s['name'], 0, 1, 'UTF-8'), 'UTF-8') : 'H';
+    $students[] = [
+        'id'           => $s['id'],
+        'name'         => $s['name'] ?? '',
+        'username'     => $s['username'] ?? '',
+        'avatar'       => $firstChar,
+        'email'        => $s['email'] ?? '',
+        'phone'        => $s['phone'] ?? '',
+        'student_code' => $s['student_code'] ?? '',
+        'faculty'      => $s['faculty'] ?? '',
+        'major'        => $s['major'] ?? '',
+        'bio'          => $s['bio'] ?? ''
     ];
 }
-
-$filteredTeachers = $teachers;
 ?>
 <!DOCTYPE html>
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Quản Lý Giảng Viên - EDULINGO Admin</title>
+    <title>Quản Lý Học Viên - EDULINGO Admin</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         :root {
@@ -299,7 +248,7 @@ $filteredTeachers = $teachers;
         .search-input-form input::placeholder { color: var(--primary-color); opacity: 0.7; }
         .search-input-form i.fa-magnifying-glass { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--primary-color); font-size: 13px; opacity: 0.7; }
 
-        .btn-add-teacher {
+        .btn-add-student {
             background-color: var(--primary-color);
             color: white;
             border: none;
@@ -313,26 +262,26 @@ $filteredTeachers = $teachers;
             gap: 8px;
             transition: opacity 0.2s;
         }
-        .btn-add-teacher:hover { opacity: 0.9; }
+        .btn-add-student:hover { opacity: 0.9; }
 
-        .teacher-list { display: flex; flex-direction: column; gap: 15px; }
-        .teacher-card { background: white; border: 1px solid var(--border-color); border-radius: 15px; padding: 18px 25px; display: flex; align-items: center; justify-content: space-between; }
-        .teacher-left { display: flex; align-items: center; gap: 15px; }
-        .teacher-avatar { width: 45px; height: 45px; background: var(--primary-light); color: var(--primary-color); border: 1px solid var(--border-color); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 16px; }
-        .teacher-info h4 { color: var(--primary-color); font-size: 15px; margin-bottom: 3px; }
-        .teacher-info .dept-email { font-size: 12px; color: #666; margin-bottom: 3px; }
-        .teacher-info .desc { font-size: 12px; color: var(--primary-color); opacity: 0.85; }
+        .student-list { display: flex; flex-direction: column; gap: 15px; }
+        .student-card { background: white; border: 1px solid var(--border-color); border-radius: 15px; padding: 18px 25px; display: flex; align-items: center; justify-content: space-between; }
+        .student-left { display: flex; align-items: center; gap: 15px; }
+        .student-avatar { width: 45px; height: 45px; background: var(--primary-light); color: var(--primary-color); border: 1px solid var(--border-color); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 16px; }
+        .student-info h4 { color: var(--primary-color); font-size: 15px; margin-bottom: 3px; }
+        .student-info .email-phone { font-size: 12px; color: #666; margin-bottom: 4px; }
+        .student-tag { font-size: 11px; background: #fce4ec; color: var(--primary-color); padding: 2px 8px; border-radius: 10px; display: inline-block; font-weight: 600; }
 
-        .teacher-actions { display: flex; align-items: center; gap: 8px; }
+        .student-actions { display: flex; align-items: center; gap: 8px; }
         .btn-view-profile { background: white; color: var(--primary-color); border: 1px solid var(--border-color); padding: 7px 16px; border-radius: 20px; font-size: 12px; font-weight: bold; cursor: pointer; transition: all 0.2s; }
         .btn-view-profile:hover { background: var(--primary-light); }
-        .btn-delete-teacher { background: #fff0f0; color: var(--danger-color); border: 1px solid #fbc4c4; padding: 7px 14px; border-radius: 20px; font-size: 12px; font-weight: bold; cursor: pointer; transition: all 0.2s; }
-        .btn-delete-teacher:hover { background: var(--danger-color); color: white; }
+        .btn-delete-student { background: #fff0f0; color: var(--danger-color); border: 1px solid #fbc4c4; padding: 7px 14px; border-radius: 20px; font-size: 12px; font-weight: bold; cursor: pointer; transition: all 0.2s; }
+        .btn-delete-student:hover { background: var(--danger-color); color: white; }
 
         /* MODAL */
         .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.4); z-index: 2000; align-items: center; justify-content: center; }
         .modal-overlay.show { display: flex; }
-        .modal-box { background: white; width: 720px; border-radius: 16px; border: 1px solid var(--border-color); box-shadow: 0 10px 30px rgba(0,0,0,0.15); display: flex; flex-direction: column; overflow: hidden; max-height: 90vh; }
+        .modal-box { background: white; width: 680px; border-radius: 16px; border: 1px solid var(--border-color); box-shadow: 0 10px 30px rgba(0,0,0,0.15); display: flex; flex-direction: column; overflow: hidden; max-height: 90vh; }
         .modal-header { padding: 18px 25px; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between; background: white; }
         .modal-header-left { display: flex; align-items: center; gap: 12px; }
         .modal-avatar { width: 40px; height: 40px; background: var(--primary-light); color: var(--primary-color); border: 1px solid var(--border-color); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 15px; }
@@ -344,10 +293,10 @@ $filteredTeachers = $teachers;
         .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px; }
         .form-group { display: flex; flex-direction: column; gap: 6px; }
         .form-group.full { grid-column: span 2; }
-        .form-group label { font-size: 12px; color: var(--primary-color); font-weight: 500; }
+        .form-group label { font-size: 12px; color: var(--primary-color); font-weight: 600; }
         .form-control { padding: 10px 14px; border-radius: 20px; border: 1px solid var(--border-color); outline: none; font-size: 12px; color: var(--primary-color); background: white; width: 100%; }
-        textarea.form-control { border-radius: 12px; resize: none; height: 75px; }
-        
+        textarea.form-control { border-radius: 12px; resize: vertical; }
+
         .modal-footer { padding: 15px 25px; border-top: 1px solid var(--border-color); display: flex; justify-content: flex-end; gap: 10px; background: white; }
         .btn-action-outline { background: white; color: var(--primary-color); border: 1px solid var(--border-color); padding: 8px 18px; border-radius: 20px; font-size: 12px; font-weight: bold; cursor: pointer; }
         .btn-action-primary { background: var(--primary-color); color: white; border: none; padding: 8px 18px; border-radius: 20px; font-size: 12px; font-weight: bold; cursor: pointer; }
@@ -393,8 +342,8 @@ $filteredTeachers = $teachers;
         <div class="nav-tabs-wrapper">
             <div class="nav-tabs">
                 <a href="tk-admin.php" class="nav-tab"><i class="fa-solid fa-chart-pie"></i> Thống kê</a>
-                <a href="gv-admin.php" class="nav-tab active"><i class="fa-regular fa-user"></i> Giảng viên</a>
-                <a href="hv-admin.php" class="nav-tab"><i class="fa-solid fa-graduation-cap"></i> Học viên</a>
+                <a href="gv-admin.php" class="nav-tab"><i class="fa-solid fa-user-tie"></i> Giảng viên</a>
+                <a href="hv-admin.php" class="nav-tab active"><i class="fa-solid fa-user-graduate"></i> Học viên</a>
                 <a href="dg-admin.php" class="nav-tab"><i class="fa-regular fa-star"></i> Đánh giá</a>
             </div>
         </div>
@@ -402,65 +351,75 @@ $filteredTeachers = $teachers;
         <div class="search-bar-container">
             <div class="search-input-form">
                 <i class="fa-solid fa-magnifying-glass"></i>
-                <input type="text" id="searchInput" value="<?= htmlspecialchars($searchKeyword) ?>" placeholder="Tìm theo tên, username, khoa...">
+                <input type="text" id="searchInput" value="<?= htmlspecialchars($searchKeyword) ?>" placeholder="Tìm tên, username, mã SV...">
             </div>
             
-            <button class="btn-add-teacher" onclick="openAddModal()">
-                <i class="fa-solid fa-plus"></i> Thêm giảng viên
+            <button class="btn-add-student" onclick="openAddModal()">
+                <i class="fa-solid fa-plus"></i> Thêm học viên
             </button>
         </div>
 
-        <div class="teacher-list" id="teacherList">
-            <?php if (count($filteredTeachers) > 0): ?>
-                <?php foreach ($filteredTeachers as $t): ?>
-                <div class="teacher-card">
-                    <div class="teacher-left">
-                        <div class="teacher-avatar"><?= $t['avatar'] ?></div>
-                        <div class="teacher-info">
-                            <h4><?= htmlspecialchars($t['name']) ?> <span style="font-size: 12px; color: #888; font-weight: normal;">(@<?= htmlspecialchars($t['username']) ?>)</span></h4>
-                            <div class="dept-email"><?= htmlspecialchars($t['dept']) ?> - <?= htmlspecialchars($t['email']) ?></div>
-                            <div class="desc"><?= htmlspecialchars($t['desc']) ?></div>
+        <div class="student-list" id="studentList">
+            <?php if (count($students) > 0): ?>
+                <?php foreach ($students as $s): ?>
+                <div class="student-card">
+                    <div class="student-left">
+                        <div class="student-avatar"><?= $s['avatar'] ?></div>
+                        <div class="student-info">
+                            <h4><?= htmlspecialchars($s['name']) ?> <span style="font-size: 12px; color: #888; font-weight: normal;">(@<?= htmlspecialchars($s['username']) ?>)</span></h4>
+                            <div class="email-phone">
+                                <i class="fa-regular fa-envelope"></i> <?= htmlspecialchars($s['email']) ?> 
+                                <?php if (!empty($s['phone'])): ?> | <i class="fa-solid fa-phone"></i> <?= htmlspecialchars($s['phone']) ?><?php endif; ?>
+                            </div>
+                            <?php if (!empty($s['student_code']) || !empty($s['faculty'])): ?>
+                                <div>
+                                    <?php if (!empty($s['student_code'])): ?><span class="student-tag">MSV: <?= htmlspecialchars($s['student_code']) ?></span><?php endif; ?>
+                                    <?php if (!empty($s['faculty'])): ?><span class="student-tag" style="background: #e3f2fd; color: #1976d2;"><?= htmlspecialchars($s['faculty']) ?></span><?php endif; ?>
+                                    <?php if (!empty($s['major'])): ?><span class="student-tag" style="background: #e8f5e9; color: #388e3c;"><?= htmlspecialchars($s['major']) ?></span><?php endif; ?>
+                                </div>
+                            <?php endif; ?>
                         </div>
                     </div>
-                    <div class="teacher-actions">
-                        <button class="btn-view-profile" onclick="openTeacherModal(<?= htmlspecialchars(json_encode($t), ENT_QUOTES, 'UTF-8') ?>)">Xem & Sửa hồ sơ</button>
-                        <button class="btn-delete-teacher" onclick="confirmDelete(<?= $t['id'] ?>, '<?= htmlspecialchars($t['name'], ENT_QUOTES) ?>')"><i class="fa-solid fa-trash-can"></i> Xóa</button>
+                    <div class="student-actions">
+                        <button class="btn-view-profile" onclick="openStudentModal(<?= htmlspecialchars(json_encode($s), ENT_QUOTES, 'UTF-8') ?>)">Xem & Sửa hồ sơ</button>
+                        <button class="btn-delete-student" onclick="confirmDelete(<?= $s['id'] ?>, '<?= htmlspecialchars($s['name'], ENT_QUOTES) ?>')"><i class="fa-solid fa-trash-can"></i> Xóa</button>
                     </div>
                 </div>
                 <?php endforeach; ?>
             <?php else: ?>
                 <div style="text-align: center; padding: 30px; color: var(--primary-color); background: white; border-radius: 15px; border: 1px solid var(--border-color); font-size: 13px;">
-                    Không tìm thấy giảng viên phù hợp.
+                    Không tìm thấy học viên phù hợp.
                 </div>
             <?php endif; ?>
         </div>
     </div>
 
-    <!-- FORM ẨN ĐỂ GỬI YÊU CẦU XÓA -->
-    <form id="deleteForm" method="POST" action="gv-admin.php" style="display:none;">
-        <input type="hidden" name="action" value="delete_lecturer">
-        <input type="hidden" name="lecturer_id" id="deleteLecturerId">
+    <!-- FORM ẨN GỬI YÊU CẦU XÓA -->
+    <form id="deleteForm" method="POST" action="hv-admin.php" style="display:none;">
+        <input type="hidden" name="action" value="delete_student">
+        <input type="hidden" name="student_id" id="deleteStudentId">
     </form>
 
-    <!-- MODAL (THÊM VÀ SỬA TÀI KHOẢN GIẢNG VIÊN) -->
-    <div class="modal-overlay" id="teacherModal">
-        <form class="modal-box" method="POST" action="gv-admin.php">
-            <input type="hidden" name="action" id="modalAction" value="update_lecturer">
-            <input type="hidden" name="lecturer_id" id="modalLecturerId">
+    <!-- MODAL THÊM & SỬA HỌC VIÊN -->
+    <div class="modal-overlay" id="studentModal">
+        <form class="modal-box" method="POST" action="hv-admin.php">
+            <input type="hidden" name="action" id="modalAction" value="update_student">
+            <input type="hidden" name="student_id" id="modalStudentId">
 
             <div class="modal-header">
                 <div class="modal-header-left">
-                    <div class="modal-avatar" id="modalAvatar">G</div>
+                    <div class="modal-avatar" id="modalAvatar">H</div>
                     <div class="modal-title-info">
-                        <small id="modalSubTitle" style="font-size: 10px; color: #888; text-transform: uppercase;">Chỉnh sửa hồ sơ giảng viên</small>
-                        <h4 id="modalTeacherName">Giảng viên</h4>
-                        <p id="modalTeacherSub">Khoa Ngoại Ngữ</p>
+                        <small id="modalSubTitle" style="font-size: 10px; color: #888; text-transform: uppercase;">Chỉnh sửa học viên</small>
+                        <h4 id="modalStudentName">Học viên</h4>
+                        <p id="modalStudentSub">Tài khoản sinh viên</p>
                     </div>
                 </div>
-                <button type="button" class="modal-close" onclick="closeTeacherModal()"><i class="fa-solid fa-xmark"></i></button>
+                <button type="button" class="modal-close" onclick="closeStudentModal()"><i class="fa-solid fa-xmark"></i></button>
             </div>
 
             <div class="modal-body">
+                <!-- THÔNG TIN TÀI KHOẢN -->
                 <div class="form-grid">
                     <div class="form-group">
                         <label>Họ và tên <span style="color:red;">*</span></label>
@@ -468,7 +427,7 @@ $filteredTeachers = $teachers;
                     </div>
                     <div class="form-group">
                         <label>Tên đăng nhập (Username) <span style="color:red;">*</span></label>
-                        <input type="text" class="form-control" name="username" id="inputUsername" required placeholder="Nhập username đăng nhập...">
+                        <input type="text" class="form-control" name="username" id="inputUsername" required placeholder="Nhập username...">
                     </div>
                 </div>
 
@@ -483,34 +442,39 @@ $filteredTeachers = $teachers;
                     </div>
                 </div>
 
+                <!-- THÔNG TIN HỒ SƠ STUDENT_PROFILES -->
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>Mã sinh viên (student_code)</label>
+                        <input type="text" class="form-control" name="student_code" id="inputStudentCode" placeholder="VD: SV001">
+                    </div>
+                    <div class="form-group">
+                        <label>Khoa (faculty)</label>
+                        <input type="text" class="form-control" name="faculty" id="inputFaculty" placeholder="VD: Khóa học Tiếng Anh">
+                    </div>
+                </div>
+
+                <div class="form-grid">
+                    <div class="form-group full">
+                        <label>Chuyên ngành / Ngoại ngữ (major)</label>
+                        <input type="text" class="form-control" name="major" id="inputMajor" placeholder="VD: Tiếng Anh Giao tiếp">
+                    </div>
+                </div>
+
                 <div class="form-group full" style="margin-bottom: 15px;">
-                    <label>Khoa Ngoại Ngữ</label>
-                    <select class="form-control" name="faculty" id="inputDept">
-                        <option value="Khoa Tiếng Anh">Khoa Tiếng Anh</option>
-                        <option value="Khoa Tiếng Pháp">Khoa Tiếng Pháp</option>
-                        <option value="Khoa Tiếng Trung">Khoa Tiếng Trung</option>
-                        <option value="Khoa Tiếng Nhật">Khoa Tiếng Nhật</option>
-                    </select>
+                    <label>Mô tả / Ghi chú (bio)</label>
+                    <textarea class="form-control" name="bio" id="inputBio" rows="3" placeholder="Nhập mô tả hoặc ghi chú tư vấn..."></textarea>
                 </div>
 
                 <div class="form-group full" id="passwordGroup" style="display: none; margin-bottom: 15px;">
                     <label>Mật khẩu tài khoản (Mặc định: 123456)</label>
                     <input type="password" class="form-control" name="password" id="inputPassword" placeholder="Để trống nếu dùng mật khẩu mặc định 123456">
                 </div>
-
-                <div class="form-group full" style="margin-bottom: 15px;">
-                    <label>Chuyên môn / chủ đề tư vấn</label>
-                    <input type="text" class="form-control" name="specialty" id="inputDesc" placeholder="Ví dụ: Luyện thi IELTS, Ngữ pháp nâng cao...">
-                </div>
-                <div class="form-group full">
-                    <label>Giới thiệu</label>
-                    <textarea class="form-control" name="bio" id="inputIntro" placeholder="Mô tả tóm tắt bản thân..."></textarea>
-                </div>
             </div>
 
             <div class="modal-footer">
-                <button type="button" class="btn-action-outline" onclick="closeTeacherModal()">Hủy</button>
-                <button type="submit" class="btn-action-primary" id="btnSubmitModal">Lưu hồ sơ vào Database</button>
+                <button type="button" class="btn-action-outline" onclick="closeStudentModal()">Hủy</button>
+                <button type="submit" class="btn-action-primary" id="btnSubmitModal">Lưu thông tin</button>
             </div>
         </form>
     </div>
@@ -555,69 +519,71 @@ $filteredTeachers = $teachers;
             userDropdown.classList.remove('show'); 
         });
 
-        // 1. MỞ MODAL THÊM GIẢNG VIÊN
+        // 1. MỞ MODAL THÊM HỌC VIÊN
         function openAddModal() {
-            document.getElementById('modalAction').value = 'add_lecturer';
-            document.getElementById('modalLecturerId').value = '';
+            document.getElementById('modalAction').value = 'add_student';
+            document.getElementById('modalStudentId').value = '';
             
             document.getElementById('modalAvatar').innerText = '+';
             document.getElementById('modalSubTitle').innerText = 'TẠO TÀI KHOẢN MỚI';
-            document.getElementById('modalTeacherName').innerText = 'Thêm giảng viên mới';
-            document.getElementById('modalTeacherSub').innerText = 'Nhập thông tin tài khoản để giảng viên đăng nhập';
+            document.getElementById('modalStudentName').innerText = 'Thêm học viên mới';
+            document.getElementById('modalStudentSub').innerText = 'Nhập thông tin tài khoản cho học viên';
 
             document.getElementById('inputName').value = '';
             document.getElementById('inputUsername').value = '';
             document.getElementById('inputEmail').value = '';
             document.getElementById('inputPhone').value = '';
-            document.getElementById('inputDept').selectedIndex = 0;
-            document.getElementById('inputDesc').value = '';
-            document.getElementById('inputIntro').value = '';
+            document.getElementById('inputStudentCode').value = '';
+            document.getElementById('inputFaculty').value = '';
+            document.getElementById('inputMajor').value = '';
+            document.getElementById('inputBio').value = '';
             
             document.getElementById('passwordGroup').style.display = 'flex';
-            document.getElementById('btnSubmitModal').innerText = 'Tạo mới giảng viên';
+            document.getElementById('btnSubmitModal').innerText = 'Tạo mới học viên';
 
-            document.getElementById('teacherModal').classList.add('show');
+            document.getElementById('studentModal').classList.add('show');
         }
 
-        // 2. MỞ MODAL SỬA GIẢNG VIÊN
-        function openTeacherModal(teacher) {
-            document.getElementById('modalAction').value = 'update_lecturer';
-            document.getElementById('modalLecturerId').value = teacher.id;
+        // 2. MỞ MODAL SỬA HỌC VIÊN
+        function openStudentModal(student) {
+            document.getElementById('modalAction').value = 'update_student';
+            document.getElementById('modalStudentId').value = student.id;
             
-            document.getElementById('modalAvatar').innerText = teacher.avatar;
-            document.getElementById('modalSubTitle').innerText = 'CHỈNH SỬA HỒ SƠ GIẢNG VIÊN';
-            document.getElementById('modalTeacherName').innerText = teacher.name;
-            document.getElementById('modalTeacherSub').innerText = teacher.dept + ' - Username: ' + teacher.username;
+            document.getElementById('modalAvatar').innerText = student.avatar;
+            document.getElementById('modalSubTitle').innerText = 'CHỈNH SỬA THÔNG TIN HỌC VIÊN';
+            document.getElementById('modalStudentName').innerText = student.name;
+            document.getElementById('modalStudentSub').innerText = 'Username: ' + student.username;
             
-            document.getElementById('inputName').value = teacher.name;
-            document.getElementById('inputUsername').value = teacher.username;
-            document.getElementById('inputEmail').value = teacher.email;
-            document.getElementById('inputPhone').value = teacher.phone || '';
-            document.getElementById('inputDept').value = teacher.dept;
-            document.getElementById('inputDesc').value = teacher.desc;
-            document.getElementById('inputIntro').value = teacher.intro;
+            document.getElementById('inputName').value = student.name;
+            document.getElementById('inputUsername').value = student.username;
+            document.getElementById('inputEmail').value = student.email;
+            document.getElementById('inputPhone').value = student.phone || '';
+            document.getElementById('inputStudentCode').value = student.student_code || '';
+            document.getElementById('inputFaculty').value = student.faculty || '';
+            document.getElementById('inputMajor').value = student.major || '';
+            document.getElementById('inputBio').value = student.bio || '';
 
             document.getElementById('passwordGroup').style.display = 'none';
-            document.getElementById('btnSubmitModal').innerText = 'Lưu hồ sơ vào Database';
+            document.getElementById('btnSubmitModal').innerText = 'Lưu thông tin';
 
-            document.getElementById('teacherModal').classList.add('show');
+            document.getElementById('studentModal').classList.add('show');
         }
 
-        function closeTeacherModal() {
-            document.getElementById('teacherModal').classList.remove('show');
+        function closeStudentModal() {
+            document.getElementById('studentModal').classList.remove('show');
         }
 
         // 3. XÁC NHẬN XÓA
         function confirmDelete(id, name) {
-            if (confirm(`Bạn có chắc chắn muốn xóa giảng viên "${name}" khỏi hệ thống không?`)) {
-                document.getElementById('deleteLecturerId').value = id;
+            if (confirm(`Bạn có chắc chắn muốn xóa học viên "${name}" khỏi hệ thống không?`)) {
+                document.getElementById('deleteStudentId').value = id;
                 document.getElementById('deleteForm').submit();
             }
         }
 
         document.getElementById('searchInput').addEventListener('keyup', function(e) {
             if (e.key === 'Enter') {
-                window.location.href = 'gv-admin.php?keyword=' + encodeURIComponent(this.value);
+                window.location.href = 'hv-admin.php?keyword=' + encodeURIComponent(this.value);
             }
         });
     </script>
