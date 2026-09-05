@@ -97,10 +97,12 @@ $stmt->execute(['id' => $user_id]);
 $student_profile = $stmt->fetch();
 
 $display_code = !empty($student_profile['student_code']) ? $student_profile['student_code'] : ($student_profile['username'] ?? '');
-$selected_student = !empty($student_profile['fullname']) ? $student_profile['fullname'] : 'Học viên';
+$selected_student = !empty($student_profile['fullname']) ? trim($student_profile['fullname']) : 'Học viên';
 
-// Tách chữ cái đại diện Avatar
-$avatar_letter = mb_strtoupper(mb_substr($selected_student, 0, 1, 'UTF-8'), 'UTF-8');
+// Tách chữ cái đại diện Avatar (Lấy chữ cái đầu tiên của TÊN - từ cuối cùng)
+$name_parts = explode(' ', $selected_student);
+$first_name = end($name_parts);
+$avatar_letter = mb_strtoupper(mb_substr($first_name, 0, 1, 'UTF-8'), 'UTF-8');
 ?>
 
 <!DOCTYPE html>
