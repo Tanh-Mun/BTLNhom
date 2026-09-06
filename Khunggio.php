@@ -4,14 +4,22 @@ require_once 'db.php';
 
 if (!isset($pdo) && isset($conn)) { $pdo = $conn; }
 
-$lecturer_id = $_SESSION['user_id'] ?? 1;
+$lecturer_id = $_SESSION['user_id'] ?? $_SESSION['user']['id'] ?? $_SESSION['id'] ?? 1;
 
 // Xử lý khi Giảng viên bấm "Tạo khung giờ mới"
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'add_slot') {
     $topic = trim($_POST['topic']);
     $start_time = $_POST['start_time'];
     $end_time = $_POST['end_time'];
-    $location = trim($_POST['location'] ?? 'Online - Zoom');
+    $location_type = $_POST['location_type'] ?? 'online';
+    $custom_location = trim($_POST['custom_location'] ?? '');
+
+    // Xác định giá trị lưu vào cột location
+    if ($location_type === 'online') {
+        $location = !empty($custom_location) ? "Trực tuyến (" . $custom_location . ")" : "Trực tuyến (Zoom/Google Meet)";
+    } else {
+        $location = !empty($custom_location) ? "Trực tiếp (" . $custom_location . ")" : "Trực tiếp (Phòng làm việc)";
+    }
 
     if (!empty($topic) && !empty($start_time) && !empty($end_time)) {
         $stmt = $pdo->prepare("INSERT INTO time_slots (lecturer_id, topic, start_time, end_time, location, status) VALUES (?, ?, ?, ?, ?, 'available')");
@@ -36,9 +44,18 @@ $stmt = $pdo->prepare("SELECT * FROM time_slots WHERE lecturer_id = ? ORDER BY s
 $stmt->execute([$lecturer_id]);
 $time_slots = $stmt->fetchAll();
 
-$selected_lecturer = $_SESSION['user_name'] ?? 'Nguyễn Thảo Vy';
-$name_parts = explode(' ', trim($selected_lecturer));
-$avatar_letter = strtoupper(substr(end($name_parts), 0, 1));
+// Lấy tên giảng viên từ DB
+$stmtLecturer = $pdo->prepare("SELECT fullname FROM users WHERE id = ?");
+$stmtLecturer->execute([$lecturer_id]);
+$lecturer_data = $stmtLecturer->fetch(PDO::FETCH_ASSOC);
+
+$selected_lecturer = !empty($lecturer_data['fullname']) 
+    ? trim($lecturer_data['fullname']) 
+    : ($_SESSION['user_name'] ?? $_SESSION['user']['fullname'] ?? 'Giảng viên');
+
+$name_parts = explode(' ', $selected_lecturer);
+$first_name = end($name_parts);
+$avatar_letter = mb_strtoupper(mb_substr($first_name, 0, 1, 'UTF-8'), 'UTF-8');
 ?>
 
 <!DOCTYPE html>
@@ -83,17 +100,20 @@ $avatar_letter = strtoupper(substr(end($name_parts), 0, 1));
 
         /* FORM */
         .card-form { background: white; padding: 20px 24px; border-radius: 12px; border: 1px solid var(--border-color); margin-bottom: 25px; }
-        .card-form h3 { color: var(--primary-color); font-size: 16px; margin-bottom: 12px; }
-        .form-grid { display: grid; grid-template-columns: 2fr 1.5fr 1.5fr 1fr; gap: 12px; }
-        .form-group label { display: block; font-size: 12px; font-weight: bold; margin-bottom: 5px; color: #555; }
-        .form-group input { width: 100%; padding: 8px 12px; border: 1px solid #f48fb1; border-radius: 6px; outline: none; font-size: 13px; }
-        .form-group input:focus { border-color: var(--primary-color); }
-        .btn-submit { background: var(--primary-color); color: white; border: none; padding: 8px 15px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 13px; transition: opacity 0.2s; }
+        .card-form h3 { color: var(--primary-color); font-size: 16px; margin-bottom: 15px; }
+        .form-grid { display: grid; grid-template-columns: 2fr 1.2fr 1.2fr; gap: 15px; margin-bottom: 15px; }
+        .form-grid-2 { display: grid; grid-template-columns: 1.5fr 2fr 1fr; gap: 15px; align-items: flex-end; }
+        
+        .form-group label { display: block; font-size: 12px; font-weight: bold; margin-bottom: 6px; color: #555; }
+        .form-group input, .form-group select { width: 100%; padding: 8px 12px; border: 1px solid #f48fb1; border-radius: 6px; outline: none; font-size: 13px; background-color: white; }
+        .form-group input:focus, .form-group select:focus { border-color: var(--primary-color); }
+        
+        .btn-submit { background: var(--primary-color); color: white; border: none; padding: 8px 15px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 13px; transition: opacity 0.2s; height: 35px; width: 100%; }
         .btn-submit:hover { opacity: 0.9; }
 
         /* CARDS */
         .slot-card { background: white; border: 1px solid var(--border-color); border-radius: 12px; padding: 18px 24px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }
-        .slot-card h4 { color: #c2185b; font-size: 16px; margin-bottom: 4px; }
+        .slot-card h4 { color: #c2185b; font-size: 16px; margin-bottom: 6px; }
         .badge { padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: bold; }
         .badge-available { background: #e8f5e9; color: #2e7d32; }
         .badge-booked { background: #ffebee; color: #c62828; }
@@ -148,6 +168,8 @@ $avatar_letter = strtoupper(substr(end($name_parts), 0, 1));
             <h3>Mở khung giờ tư vấn mới</h3>
             <form method="POST">
                 <input type="hidden" name="action" value="add_slot">
+                
+                <!-- Dòng 1: Chủ đề & Thời gian -->
                 <div class="form-grid">
                     <div class="form-group">
                         <label>Chủ đề tư vấn</label>
@@ -161,8 +183,23 @@ $avatar_letter = strtoupper(substr(end($name_parts), 0, 1));
                         <label>Thời gian kết thúc</label>
                         <input type="datetime-local" name="end_time" required>
                     </div>
-                    <div style="display: flex; align-items: flex-end;">
-                        <button type="submit" class="btn-submit" style="width: 100%; height: 35px;"><i class="fa-solid fa-plus"></i> Thêm giờ</button>
+                </div>
+
+                <!-- Dòng 2: Hình thức tư vấn & Địa điểm/Link -->
+                <div class="form-grid-2">
+                    <div class="form-group">
+                        <label>Hình thức tư vấn</label>
+                        <select name="location_type" id="locationTypeSelect">
+                            <option value="online">Tư vấn trực tuyến</option>
+                            <option value="offline">Tư vấn trực tiếp</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label id="locationLabel">Chi tiết địa điểm / Link cuộc họp</label>
+                        <input type="text" name="custom_location" id="locationInput" placeholder="VD: Zoom ID: 123 456 789">
+                    </div>
+                    <div>
+                        <button type="submit" class="btn-submit"><i class="fa-solid fa-plus"></i> Thêm giờ</button>
                     </div>
                 </div>
             </form>
@@ -177,9 +214,9 @@ $avatar_letter = strtoupper(substr(end($name_parts), 0, 1));
                 <div class="slot-card">
                     <div>
                         <h4><?= htmlspecialchars($slot['topic']) ?></h4>
-                        <div style="font-size: 13px; color: #888; margin-top: 4px;">
-                            <i class="fa-regular fa-clock"></i> 
-                            <?= date('d/m/Y H:i', strtotime($slot['start_time'])) ?> - <?= date('H:i', strtotime($slot['end_time'])) ?>
+                        <div style="font-size: 13px; color: #666; margin-top: 4px; display: flex; gap: 15px; align-items: center;">
+                            <span><i class="fa-regular fa-clock"></i> <?= date('d/m/Y H:i', strtotime($slot['start_time'])) ?> - <?= date('H:i', strtotime($slot['end_time'])) ?></span>
+                            <span><i class="fa-solid fa-location-dot" style="color: var(--primary-color);"></i> <?= htmlspecialchars($slot['location'] ?? 'Trực tuyến') ?></span>
                         </div>
                     </div>
                     <div style="display: flex; align-items: center; gap: 15px;">
@@ -239,6 +276,18 @@ $avatar_letter = strtoupper(substr(end($name_parts), 0, 1));
         const userDropdown = document.getElementById('userDropdown');
         userMenuBtn.addEventListener('click', (e) => { e.stopPropagation(); userDropdown.classList.toggle('show'); });
         document.addEventListener('click', () => { userDropdown.classList.remove('show'); });
+
+        // Tự động thay đổi placeholder theo lựa chọn
+        const selectType = document.getElementById('locationTypeSelect');
+        const inputLoc = document.getElementById('locationInput');
+
+        selectType.addEventListener('change', function() {
+            if (this.value === 'online') {
+                inputLoc.placeholder = 'VD: Zoom ID: 123 456 789';
+            } else {
+                inputLoc.placeholder = 'VD: Phòng 302 - Tòa A1';
+            }
+        });
     </script>
 </body>
 </html>

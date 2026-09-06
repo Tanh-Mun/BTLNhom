@@ -26,7 +26,8 @@ if (isset($_GET['action']) && isset($_GET['appointment_id'])) {
     exit;
 }
 
-$stmt = $pdo->prepare("SELECT a.appointment_id, u.fullname AS student_name, u.email, ts.topic, ts.start_time, ts.end_time 
+// Truy vấn lấy thông tin cuộc hẹn
+$stmt = $pdo->prepare("SELECT a.appointment_id, u.fullname AS student_name, u.email, ts.topic, ts.start_time, ts.end_time, ts.location 
                        FROM appointments a 
                        JOIN time_slots ts ON a.slot_id = ts.slot_id 
                        JOIN users u ON a.student_id = u.id 
@@ -87,6 +88,8 @@ $avatar_letter = strtoupper(substr(end($name_parts), 0, 1));
         .topic { color: #f48fb1; font-weight: 500; font-size: 14px; margin: 4px 0; }
         .time { color: #888; font-size: 13px; }
         
+        .info-row { display: flex; gap: 15px; align-items: center; flex-wrap: wrap; margin-top: 6px; font-size: 13px; color: #555; }
+
         .btn-approve { background-color: #d7f5dd; color: #1b5e20; padding: 8px 18px; border-radius: 8px; font-weight: bold; text-decoration: none; font-size: 13px; transition: opacity 0.2s; }
         .btn-approve:hover { opacity: 0.85; }
         .btn-reject { background-color: #fce4ec; color: #c2185b; padding: 8px 18px; border-radius: 8px; font-weight: bold; text-decoration: none; font-size: 13px; transition: opacity 0.2s; }
@@ -145,7 +148,18 @@ $avatar_letter = strtoupper(substr(end($name_parts), 0, 1));
                     <div>
                         <h4><?= htmlspecialchars($item['student_name']) ?> <span>(<?= htmlspecialchars($item['email']) ?>)</span></h4>
                         <div class="topic"><?= htmlspecialchars($item['topic']) ?></div>
-                        <div class="time"><i class="fa-regular fa-clock"></i> <?= date('d/m/Y H:i', strtotime($item['start_time'])) ?> - <?= date('H:i', strtotime($item['end_time'])) ?></div>
+                        
+                        <div class="info-row">
+                            <span class="time"><i class="fa-regular fa-clock"></i> <?= date('d/m/Y H:i', strtotime($item['start_time'])) ?> - <?= date('H:i', strtotime($item['end_time'])) ?></span>
+                            
+                            <!-- CHỈ HIỂN THỊ ĐỊA ĐIỂM HOẶC PHÒNG HỌP -->
+                            <?php if (!empty($item['location'])): ?>
+                                <span>
+                                    <i class="fa-solid fa-location-dot" style="color: var(--primary-color);"></i> 
+                                    <?= htmlspecialchars($item['location']) ?>
+                                </span>
+                            <?php endif; ?>
+                        </div>
                     </div>
                     <div style="display: flex; gap: 10px;">
                         <a href="DanhSachCho.php?action=approve&appointment_id=<?= $item['appointment_id'] ?>" class="btn-approve">✓ Duyệt</a>

@@ -19,7 +19,7 @@ $currentUser = $stmtUser->fetch();
 
 $student_name = !empty($currentUser['fullname']) ? trim($currentUser['fullname']) : ($_SESSION['user_name'] ?? 'Học viên');
 
-// Tách chữ cái đầu tiên của TÊN (từ cuối cùng trong chuỗi họ tên)
+// Tách chữ cái đầu tiên của TÊN
 $name_parts = explode(' ', $student_name);
 $first_name = end($name_parts);
 $avatar_letter = mb_strtoupper(mb_substr($first_name, 0, 1, 'UTF-8'), 'UTF-8');
@@ -29,10 +29,11 @@ $teacher_name = "Giảng viên";
 $teacher_email = "teacher@edu.vn";
 $topic = "Tư vấn ngôn ngữ";
 $time = date('d/m/Y H:i');
+$location_raw = "Trực tuyến";
 
 if ($id > 0 && isset($pdo)) {
     $stmt = $pdo->prepare("
-        SELECT u.fullname AS teacher_name, u.email, ts.topic, ts.start_time
+        SELECT u.fullname AS teacher_name, u.email, ts.topic, ts.start_time, ts.location
         FROM appointments a
         JOIN time_slots ts ON a.slot_id = ts.slot_id
         JOIN users u ON ts.lecturer_id = u.id
@@ -46,8 +47,15 @@ if ($id > 0 && isset($pdo)) {
         if (!empty($info['email'])) { $teacher_email = $info['email']; }
         if (!empty($info['topic'])) { $topic = $info['topic']; }
         if (!empty($info['start_time'])) { $time = date('d/m/Y H:i', strtotime($info['start_time'])); }
+        if (!empty($info['location'])) { $location_raw = $info['location']; }
     }
 }
+
+// Xử lý phân loại Trực tuyến / Trực tiếp
+$is_online = (mb_stripos($location_raw, 'Trực tuyến') !== false || mb_stripos($location_raw, 'Online') !== false || preg_match('/https?:\/\//i', $location_raw));
+$location_label = $is_online ? "Trực tuyến" : "Trực tiếp";
+$location_icon = $is_online ? "fa-video" : "fa-location-dot";
+$location_badge_class = $is_online ? "badge-online" : "badge-offline";
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $rating = (int)($_POST['rating'] ?? 5);
@@ -180,7 +188,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         .teacher-info {
             display: flex;
             flex-direction: column;
-            gap: 4px;
+            gap: 8px;
         }
 
         .teacher-name-row {
@@ -202,8 +210,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         .info-sub {
             font-size: 13px;
+            color: #555;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .info-sub i {
             color: var(--primary-color);
-            opacity: 0.8;
+        }
+
+        /* BADGES CHO TRỰC TUYẾN / TRỰC TIẾP */
+        .loc-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .badge-online {
+            background-color: #e3f2fd;
+            color: #1976d2;
+            border: 1px solid #bbdefb;
+        }
+
+        .badge-offline {
+            background-color: #e8f5e9;
+            color: #2e7d32;
+            border: 1px solid #c8e6c9;
         }
 
         .star-rating {
@@ -287,8 +325,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         <span class="teacher-title">Giảng viên: <?= htmlspecialchars($teacher_name) ?></span>
                         <span class="teacher-email"><?= htmlspecialchars($teacher_email) ?></span>
                     </div>
-                    <span class="info-sub"><?= htmlspecialchars($topic) ?></span>
-                    <span class="info-sub"><?= htmlspecialchars($time) ?></span>
+                    <div style="font-size: 14px; color: var(--primary-color); font-weight: 600;"><?= htmlspecialchars($topic) ?></div>
+                    <div class="info-sub">
+                        <span><i class="fa-regular fa-clock"></i> <?= htmlspecialchars($time) ?></span>
+                        <span class="loc-badge <?= $location_badge_class ?>">
+                            <i class="fa-solid <?= $location_icon ?>"></i> <?= htmlspecialchars($location_raw) ?>
+                        </span>
+                    </div>
                 </div>
                 <div class="star-rating">
                     <i class="fa-solid fa-star"></i>

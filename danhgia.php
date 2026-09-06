@@ -33,7 +33,7 @@ $name_parts = explode(' ', $student_name);
 $first_name = end($name_parts);
 $avatar_letter = mb_strtoupper(mb_substr($first_name, 0, 1, 'UTF-8'), 'UTF-8');
 
-// Lấy danh sách cuộc hẹn status = 'completed' và CHƯA CÓ trong bảng reviews
+// Lấy danh sách cuộc hẹn status = 'completed' và CHƯA CÓ trong bảng reviews (Lấy thêm ts.location)
 $appointments = [];
 if (isset($pdo)) {
     try {
@@ -41,7 +41,8 @@ if (isset($pdo)) {
             SELECT a.appointment_id, 
                    COALESCE(u.fullname, u.username, 'Giảng viên') AS teacher_name, 
                    ts.topic, 
-                   ts.start_time
+                   ts.start_time,
+                   ts.location
             FROM appointments a
             JOIN time_slots ts ON a.slot_id = ts.slot_id
             LEFT JOIN users u ON ts.lecturer_id = u.id
@@ -148,6 +149,13 @@ if (isset($pdo)) {
                             <div class="info-text">
                                 <i class="fa-regular fa-clock"></i> <?= !empty($item['start_time']) ? date('d/m/Y H:i', strtotime($item['start_time'])) : date('d/m/Y H:i') ?>
                             </div>
+                            
+                            <!-- HIỂN THỊ LOCATION TỰ ĐỘNG -->
+                            <?php if (!empty($item['location'])): ?>
+                                <div class="info-text">
+                                    <i class="fa-solid fa-location-dot" style="color: var(--primary-color);"></i> <?= htmlspecialchars($item['location']) ?>
+                                </div>
+                            <?php endif; ?>
                         </div>
                         <div>
                             <a href="vietdanhgia.php?id=<?= $item['appointment_id'] ?>" class="btn-review"><i class="fa-regular fa-star"></i> Viết đánh giá</a>

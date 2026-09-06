@@ -9,6 +9,20 @@ if (!isset($pdo) && isset($conn)) {
 // Lấy lecturer_id linh hoạt từ Session
 $lecturer_id = $_SESSION['user']['id'] ?? $_SESSION['user_id'] ?? $_SESSION['id'] ?? 1;
 
+// Lấy tên giảng viên từ cơ sở dữ liệu dựa vào lecturer_id
+$stmtLecturer = $pdo->prepare("SELECT fullname FROM users WHERE id = ?");
+$stmtLecturer->execute([$lecturer_id]);
+$lecturer_data = $stmtLecturer->fetch(PDO::FETCH_ASSOC);
+
+$selected_lecturer = !empty($lecturer_data['fullname']) 
+    ? trim($lecturer_data['fullname']) 
+    : ($_SESSION['user']['fullname'] ?? $_SESSION['user_name'] ?? $_SESSION['fullname'] ?? 'Giảng viên');
+
+// Tách chữ cái đầu tiên của TÊN để làm Avatar
+$name_parts = explode(' ', $selected_lecturer);
+$first_name = end($name_parts);
+$avatar_letter = mb_strtoupper(mb_substr($first_name, 0, 1, 'UTF-8'), 'UTF-8');
+
 // Xử lý khi Giảng viên bấm "Hoàn thành"
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['complete_appointment_id'])) {
     $appt_id = (int)$_POST['complete_appointment_id'];
@@ -24,13 +38,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['complete_appointment_
     exit;
 }
 
-// Lấy danh sách cuộc hẹn đã duyệt (status = 'approved')
+// Lấy danh sách cuộc hẹn đã duyệt (status = 'approved') bổ sung cột location
 $appointments = [];
 try {
     $sql = "SELECT a.appointment_id AS appt_id, 
                    COALESCE(u.fullname, u.username, 'Học viên') AS student_name, 
                    u.email AS student_email, 
-                   ts.topic, ts.start_time, ts.end_time
+                   ts.topic, ts.start_time, ts.end_time, ts.location
             FROM appointments a
             JOIN users u ON a.student_id = u.id
             JOIN time_slots ts ON a.slot_id = ts.slot_id
@@ -42,10 +56,6 @@ try {
 } catch (PDOException $e) {
     error_log("Lỗi truy vấn: " . $e->getMessage());
 }
-
-$selected_lecturer = $_SESSION['user']['fullname'] ?? $_SESSION['user_name'] ?? $_SESSION['fullname'] ?? 'Giảng viên';
-$name_parts = explode(' ', trim($selected_lecturer));
-$avatar_letter = strtoupper(substr(end($name_parts), 0, 1));
 ?>
 
 <!DOCTYPE html>
@@ -79,7 +89,10 @@ $avatar_letter = strtoupper(substr(end($name_parts), 0, 1));
         .info h3 { color: #c2185b; font-size: 18px; margin-bottom: 6px; font-weight: bold; }
         .info h3 span { color: #888; font-weight: normal; font-size: 14px; }
         .info .topic { color: #f48fb1; font-size: 14px; margin-bottom: 6px; font-weight: 500; }
-        .info .time { color: #888; font-size: 13px; }
+        
+        .info-row { display: flex; gap: 15px; align-items: center; flex-wrap: wrap; font-size: 13px; color: #555; }
+        .info .time { color: #888; }
+        
         .action-btns { display: flex; gap: 10px; align-items: center; }
         .btn-complete { background-color: white; color: #d81b60; border: 1px solid #f48fb1; padding: 8px 18px; border-radius: 8px; font-size: 13px; cursor: pointer; font-weight: bold; transition: all 0.2s; }
         .btn-complete:hover { background-color: #d81b60; color: white; }
@@ -134,9 +147,20 @@ $avatar_letter = strtoupper(substr(end($name_parts), 0, 1));
                     <div class="info">
                         <h3><?= htmlspecialchars($item['student_name']) ?> <span>· <?= htmlspecialchars($item['student_email'] ?? '') ?></span></h3>
                         <div class="topic"><?= htmlspecialchars($item['topic'] ?? 'Tư vấn học tập') ?></div>
-                        <div class="time">
-                            <i class="fa-regular fa-clock"></i> 
-                            <?= date('d/m/Y H:i', strtotime($item['start_time'])) ?> - <?= date('H:i', strtotime($item['end_time'])) ?>
+                        
+                        <div class="info-row">
+                            <span class="time">
+                                <i class="fa-regular fa-clock"></i> 
+                                <?= date('d/m/Y H:i', strtotime($item['start_time'])) ?> - <?= date('H:i', strtotime($item['end_time'])) ?>
+                            </span>
+
+                            <!-- ĐỊA ĐIỂM HOẶC PHÒNG HỌP -->
+                            <?php if (!empty($item['location'])): ?>
+                                <span>
+                                    <i class="fa-solid fa-location-dot" style="color: var(--primary-color);"></i> 
+                                    <?= htmlspecialchars($item['location']) ?>
+                                </span>
+                            <?php endif; ?>
                         </div>
                     </div>
                     <div class="action-btns">

@@ -39,8 +39,8 @@ $name_parts = explode(' ', $student_name);
 $first_name = end($name_parts);
 $avatar_letter = mb_strtoupper(mb_substr($first_name, 0, 1, 'UTF-8'), 'UTF-8');
 
-// Truy vấn danh sách cuộc hẹn
-$sql = "SELECT a.appointment_id, LOWER(a.status) AS status, ts.topic, ts.start_time, ts.end_time, ts.location, 
+// Truy vấn danh sách cuộc hẹn (Lấy thêm ts.type và ts.location)
+$sql = "SELECT a.appointment_id, LOWER(a.status) AS status, ts.topic, ts.start_time, ts.end_time, ts.type, ts.location, 
                u.fullname AS lecturer_name
         FROM appointments a
         JOIN time_slots ts ON a.slot_id = ts.slot_id
@@ -112,7 +112,7 @@ $my_appointments = $stmt->fetchAll();
         .footer-links li { margin-bottom: 10px; }
         .footer-links a { color: white; text-decoration: none; font-size: 12px; opacity: 0.95; }
         .social-icons { display: flex; gap: 10px; }
-        .social-btn { width: 32px; height: 32px; background: white; color: var(--primary-color); border-radius: 50%; display: flex; align- items: center; justify-content: center; font-size: 11px; font-weight: bold; text-decoration: none; }
+        .social-btn { width: 32px; height: 32px; background: white; color: var(--primary-color); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold; text-decoration: none; }
     </style>
 </head>
 <body>
@@ -154,8 +154,13 @@ $my_appointments = $stmt->fetchAll();
                         <div>
                             <h4 style="color: var(--primary-color); font-size: 16px; margin-bottom: 4px;"><?= htmlspecialchars($item['lecturer_name']) ?></h4>
                             <div style="font-size: 13px; font-weight: bold; color: #444;"><?= htmlspecialchars($item['topic']) ?></div>
-                            <div style="font-size: 12px; color: #777; margin-top: 4px;">
-                                <i class="fa-regular fa-clock"></i> <?= date('d/m/Y H:i', strtotime($item['start_time'])) ?> - <?= date('H:i', strtotime($item['end_time'])) ?>
+                            <div style="font-size: 12px; color: #777; margin-top: 4px; display: flex; gap: 15px; align-items: center; flex-wrap: wrap;">
+                                <span><i class="fa-regular fa-clock"></i> <?= date('d/m/Y H:i', strtotime($item['start_time'])) ?> - <?= date('H:i', strtotime($item['end_time'])) ?></span>
+                                
+                                <!-- HIỂN THỊ LOCATION TỰ ĐỘNG -->
+                                <?php if (!empty($item['location'])): ?>
+                                    <span style="color: #555;"><i class="fa-solid fa-location-dot" style="color: var(--primary-color);"></i> <?= htmlspecialchars($item['location']) ?></span>
+                                <?php endif; ?>
                             </div>
                         </div>
                         <div style="display: flex; align-items: center;">
