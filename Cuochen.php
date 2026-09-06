@@ -6,8 +6,8 @@ if (!isset($pdo) && isset($conn)) {
     $pdo = $conn; 
 }
 
-// Lấy ID giảng viên từ Session (nếu chưa có thì lấy tạm ID 1)
-$lecturer_id = $_SESSION['user_id'] ?? 1;
+// Lấy lecturer_id linh hoạt từ Session
+$lecturer_id = $_SESSION['user']['id'] ?? $_SESSION['user_id'] ?? $_SESSION['id'] ?? 1;
 
 // Xử lý khi Giảng viên bấm "Hoàn thành"
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['complete_appointment_id'])) {
@@ -17,17 +17,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['complete_appointment_
         $updateStmt = $pdo->prepare("UPDATE appointments SET status = 'completed' WHERE appointment_id = ?");
         $updateStmt->execute([$appt_id]);
     } catch (PDOException $e) {
-        $updateStmt = $pdo->prepare("UPDATE appointments SET status = 'completed' WHERE id = ?");
-        $updateStmt->execute([$appt_id]);
+        error_log("Lỗi cập nhật trạng thái: " . $e->getMessage());
     }
     
     header('Location: Cuochen.php');
     exit;
 }
 
-// Truy vấn các cuộc hẹn đã duyệt (status = 'approved') của Giảng viên
+// Lấy danh sách cuộc hẹn đã duyệt (status = 'approved')
+$appointments = [];
 try {
-    $sql = "SELECT a.appointment_id AS appt_id, u.fullname AS student_name, u.email AS student_email, 
+    $sql = "SELECT a.appointment_id AS appt_id, 
+                   COALESCE(u.fullname, u.username, 'Học viên') AS student_name, 
+                   u.email AS student_email, 
                    ts.topic, ts.start_time, ts.end_time
             FROM appointments a
             JOIN users u ON a.student_id = u.id
@@ -36,21 +38,12 @@ try {
             ORDER BY ts.start_time ASC";
     $stmt = $pdo->prepare($sql);
     $stmt->execute([$lecturer_id]);
-    $appointments = $stmt->fetchAll();
+    $appointments = $stmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (PDOException $e) {
-    $sql = "SELECT a.id AS appt_id, u.fullname AS student_name, u.email AS student_email, 
-                   ts.topic, ts.start_time, ts.end_time
-            FROM appointments a
-            JOIN users u ON a.student_id = u.id
-            JOIN time_slots ts ON a.slot_id = ts.slot_id
-            WHERE ts.lecturer_id = ? AND LOWER(a.status) = 'approved'
-            ORDER BY ts.start_time ASC";
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute([$lecturer_id]);
-    $appointments = $stmt->fetchAll();
+    error_log("Lỗi truy vấn: " . $e->getMessage());
 }
 
-$selected_lecturer = $_SESSION['user_name'] ?? 'Nguyễn Thảo Vy';
+$selected_lecturer = $_SESSION['user']['fullname'] ?? $_SESSION['user_name'] ?? $_SESSION['fullname'] ?? 'Giảng viên';
 $name_parts = explode(' ', trim($selected_lecturer));
 $avatar_letter = strtoupper(substr(end($name_parts), 0, 1));
 ?>
@@ -63,51 +56,34 @@ $avatar_letter = strtoupper(substr(end($name_parts), 0, 1));
     <title>Cuộc hẹn - Giảng viên</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        :root { 
-            --primary-color: #d81b60; 
-            --primary-light: #fdf2f5; 
-            --border-color: #f8bbd0; 
-        }
+        :root { --primary-color: #d81b60; --primary-light: #fdf2f5; --border-color: #f8bbd0; }
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Arial, sans-serif; }
         body { background-color: var(--primary-light); color: #333; min-height: 100vh; display: flex; flex-direction: column; }
-        
-        /* HEADER UI */
         .header { background-color: var(--primary-color); color: white; padding: 15px 40px; display: flex; align-items: center; justify-content: space-between; }
         .header-brand { display: flex; align-items: center; gap: 15px; }
         .logo-box { background: white; color: var(--primary-color); font-weight: bold; padding: 8px 12px; border-radius: 6px; font-size: 14px; }
         .header-text h2 { font-size: 18px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 2px; }
         .header-text p { font-size: 13px; opacity: 0.9; }
-
-        /* USER DROPDOWN MENU - BẢN CẬP NHẬT CHUẨN THEO ẢNH */
         .user-dropdown { position: relative; display: inline-block; }
-        .user-profile-icon { display: flex; align-items: center; gap: 10px; color: white; background-color: rgba(255, 255, 255, 0.15); padding: 6px 16px 6px 6px; border-radius: 25px; border: 1px solid rgba(255, 255, 255, 0.3); cursor: pointer; text-decoration: none; user-select: none; }
+        .user-profile-icon { display: flex; align-items: center; gap: 10px; color: white; background-color: rgba(255, 255, 255, 0.15); padding: 6px 16px 6px 6px; border-radius: 25px; border: 1px solid rgba(255, 255, 255, 0.3); cursor: pointer; text-decoration: none; }
         .avatar-circle { width: 34px; height: 34px; background-color: white; color: var(--primary-color); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 15px; }
-        
         .dropdown-menu { display: none; position: absolute; right: 0; top: calc(100% + 8px); background-color: white; min-width: 170px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15); padding: 8px 0; z-index: 1000; }
         .dropdown-menu.show { display: block; }
-        .dropdown-item { display: flex; align-items: center; gap: 10px; padding: 10px 18px; color: var(--primary-color); text-decoration: none; font-size: 14px; font-weight: 600; transition: background 0.2s; }
+        .dropdown-item { display: flex; align-items: center; gap: 10px; padding: 10px 18px; color: var(--primary-color); text-decoration: none; font-size: 14px; font-weight: 600; }
         .dropdown-item:hover { background-color: #fce4ec; }
-        .dropdown-item i { font-size: 16px; width: 18px; text-align: center; }
-
-        /* CONTAINER & NAV-TABS */
         .container { max-width: 1000px; margin: 25px auto; padding: 0 20px; width: 100%; flex: 1; }
         .nav-tabs { display: inline-flex; background: white; padding: 4px; border-radius: 30px; border: 1px solid var(--border-color); margin-bottom: 25px; }
         .tab-btn { padding: 8px 18px; border-radius: 20px; border: none; background: transparent; color: var(--primary-color); font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; text-decoration: none; }
         .tab-btn.active { background: var(--primary-color); color: white; }
-
-        /* CARD DANH SÁCH */
         .appointment-card { background: white; border: 1px solid var(--border-color); border-radius: 12px; padding: 20px 24px; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center; }
         .info h3 { color: #c2185b; font-size: 18px; margin-bottom: 6px; font-weight: bold; }
         .info h3 span { color: #888; font-weight: normal; font-size: 14px; }
         .info .topic { color: #f48fb1; font-size: 14px; margin-bottom: 6px; font-weight: 500; }
         .info .time { color: #888; font-size: 13px; }
-        
         .action-btns { display: flex; gap: 10px; align-items: center; }
         .btn-complete { background-color: white; color: #d81b60; border: 1px solid #f48fb1; padding: 8px 18px; border-radius: 8px; font-size: 13px; cursor: pointer; font-weight: bold; transition: all 0.2s; }
         .btn-complete:hover { background-color: #d81b60; color: white; }
         .btn-remind { background-color: #fce4ec; color: #c2185b; border: none; padding: 8px 16px; border-radius: 8px; font-size: 13px; cursor: pointer; font-weight: bold; display: inline-flex; align-items: center; gap: 5px; text-decoration: none; }
-
-        /* FOOTER UI */
         .footer { background-color: var(--primary-color); color: white; padding: 40px 60px; margin-top: 40px; }
         .footer-grid { max-width: 1000px; margin: 0 auto; display: grid; grid-template-columns: 1.5fr 1fr 1fr 1.2fr; gap: 30px; }
         .footer-col h5 { font-size: 12px; text-transform: uppercase; margin-bottom: 15px; letter-spacing: 0.5px; }
@@ -120,7 +96,6 @@ $avatar_letter = strtoupper(substr(end($name_parts), 0, 1));
     </style>
 </head>
 <body>
-    <!-- HEADER -->
     <div class="header">
         <div class="header-brand">
             <div class="logo-box">ABC</div>
@@ -141,9 +116,7 @@ $avatar_letter = strtoupper(substr(end($name_parts), 0, 1));
         </div>
     </div>
 
-    <!-- MAIN CONTAINER -->
     <div class="container">
-        <!-- NAV TABS -->
         <div class="nav-tabs">
             <a href="Cuochen.php" class="tab-btn active"><i class="fa-regular fa-calendar-check"></i> Cuộc hẹn</a>
             <a href="Khunggio.php" class="tab-btn"><i class="fa-regular fa-clock"></i> Khung giờ</a>
@@ -159,8 +132,8 @@ $avatar_letter = strtoupper(substr(end($name_parts), 0, 1));
             <?php foreach ($appointments as $item): ?>
                 <div class="appointment-card">
                     <div class="info">
-                        <h3><?= htmlspecialchars($item['student_name']) ?> <span>· <?= htmlspecialchars($item['student_email']) ?></span></h3>
-                        <div class="topic"><?= htmlspecialchars($item['topic']) ?></div>
+                        <h3><?= htmlspecialchars($item['student_name']) ?> <span>· <?= htmlspecialchars($item['student_email'] ?? '') ?></span></h3>
+                        <div class="topic"><?= htmlspecialchars($item['topic'] ?? 'Tư vấn học tập') ?></div>
                         <div class="time">
                             <i class="fa-regular fa-clock"></i> 
                             <?= date('d/m/Y H:i', strtotime($item['start_time'])) ?> - <?= date('H:i', strtotime($item['end_time'])) ?>
@@ -178,7 +151,6 @@ $avatar_letter = strtoupper(substr(end($name_parts), 0, 1));
         <?php endif; ?>
     </div>
 
-    <!-- FOOTER -->
     <footer class="footer">
         <div class="footer-grid">
             <div class="footer-col">
@@ -197,7 +169,7 @@ $avatar_letter = strtoupper(substr(end($name_parts), 0, 1));
                 <h5>KHÁM PHÁ</h5>
                 <ul class="footer-links">
                     <li><a href="timvadatlich.php">Tìm giảng viên</a></li>
-                    <li><a href="danhgia.php">Đánh giá</a></li>
+                    <li><a href="danhgia_2.php">Đánh giá</a></li>
                     <li><a href="#">Ngôn ngữ hỗ trợ</a></li>
                     <li><a href="#">Câu hỏi thường gặp</a></li>
                 </ul>
@@ -220,13 +192,11 @@ $avatar_letter = strtoupper(substr(end($name_parts), 0, 1));
         const userMenuBtn = document.getElementById('userMenuBtn');
         const userDropdown = document.getElementById('userDropdown');
 
-        // Bấm vào nút tên người dùng thì bật / tắt menu
         userMenuBtn.addEventListener('click', function(e) { 
             e.stopPropagation(); 
             userDropdown.classList.toggle('show'); 
         });
 
-        // Bấm ra ngoài vùng menu thì tự đóng
         document.addEventListener('click', function() { 
             userDropdown.classList.remove('show'); 
         });
