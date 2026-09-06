@@ -134,8 +134,8 @@ $avatar_letter = strtoupper(substr(end($name_parts), 0, 1));
         <div class="nav-tabs">
             <a href="Cuochen.php" class="tab-btn"><i class="fa-regular fa-calendar-check"></i> Cuộc hẹn</a>
             <a href="Khunggio.php" class="tab-btn"><i class="fa-regular fa-clock"></i> Khung giờ</a>
-            <a href="Lichtuan.php" class="tab-btn"><i class="fa-regular fa-calendar-days"></i> Lịch tuần</a>
             <a href="DanhSachCho.php" class="tab-btn active"><i class="fa-solid fa-users"></i> Danh sách chờ</a>
+            <a href="Lichtuan.php" class="tab-btn"><i class="fa-regular fa-calendar-days"></i> Lịch tuần</a>
         </div>
 
         <?php if (empty($waiting_list)): ?>
