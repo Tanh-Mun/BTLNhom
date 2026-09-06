@@ -62,7 +62,7 @@ if (isset($_GET['book_slot_id'])) {
 
         $pdo->commit();
 
-        header('Location: timvadatlich.php?msg=success');
+        header('Location: lichhen.php?msg=success');
         exit;
 
     } catch (Exception $e) {
