@@ -28,11 +28,12 @@ if (isset($_GET['book_slot_id'])) {
         $stmtSlot->execute([$slot_id]);
         $slotInfo = $stmtSlot->fetch();
 
-        if (!$slotInfo || $slotInfo['status'] !== 'available') {
+        if (!$slotInfo || strtolower($slotInfo['status']) !== 'available') {
             throw new Exception("Khung giờ này đã được sinh viên khác giữ hoặc không còn khả dụng.");
         }
 
-        $stmtCheckExist = $pdo->prepare("SELECT appointment_id FROM appointments WHERE slot_id = ? AND student_id = ? AND status != 'cancelled'");
+        // Kiểm tra xem đã có cuộc hẹn đang chờ/được duyệt ở khung giờ này chưa
+        $stmtCheckExist = $pdo->prepare("SELECT appointment_id FROM appointments WHERE slot_id = ? AND student_id = ? AND LOWER(status) IN ('pending', 'approved')");
         $stmtCheckExist->execute([$slot_id, $student_id]);
         if ($stmtCheckExist->fetch()) {
             throw new Exception("Bạn đã đăng ký khung giờ này rồi.");
@@ -43,7 +44,7 @@ if (isset($_GET['book_slot_id'])) {
             FROM appointments a
             JOIN time_slots ts ON a.slot_id = ts.slot_id
             WHERE a.student_id = ? 
-              AND a.status IN ('pending', 'approved')
+              AND LOWER(a.status) IN ('pending', 'approved')
               AND ts.start_time < ? 
               AND ts.end_time > ?
         ";
@@ -54,9 +55,22 @@ if (isset($_GET['book_slot_id'])) {
             throw new Exception("Bạn đã có một lịch hẹn khác trong khoảng thời gian này.");
         }
 
-        $stmtInsert = $pdo->prepare("INSERT INTO appointments (slot_id, student_id, status) VALUES (?, ?, 'pending')");
-        $stmtInsert->execute([$slot_id, $student_id]);
+        // Kiểm tra xem trước đây sinh viên từng hủy cuộc hẹn tại slot này chưa
+        $stmtCheckCancelled = $pdo->prepare("SELECT appointment_id FROM appointments WHERE slot_id = ? AND student_id = ? AND LOWER(status) = 'cancelled'");
+        $stmtCheckCancelled->execute([$slot_id, $student_id]);
+        $cancelledAppt = $stmtCheckCancelled->fetch();
 
+        if ($cancelledAppt) {
+            // Cập nhật lại bản ghi cũ thành pending
+            $stmtUpdateAppt = $pdo->prepare("UPDATE appointments SET status = 'pending', created_at = NOW() WHERE appointment_id = ?");
+            $stmtUpdateAppt->execute([$cancelledAppt['appointment_id']]);
+        } else {
+            // Tạo bản ghi cuộc hẹn mới
+            $stmtInsert = $pdo->prepare("INSERT INTO appointments (slot_id, student_id, status) VALUES (?, ?, 'pending')");
+            $stmtInsert->execute([$slot_id, $student_id]);
+        }
+
+        // Cập nhật trạng thái slot thành booked
         $stmtUpdateSlot = $pdo->prepare("UPDATE time_slots SET status = 'booked' WHERE slot_id = ?");
         $stmtUpdateSlot->execute([$slot_id]);
 
@@ -73,10 +87,11 @@ if (isset($_GET['book_slot_id'])) {
     }
 }
 
+// Lấy danh sách các khung giờ có status = 'available'
 $stmt = $pdo->query("SELECT ts.*, u.fullname AS lecturer_name 
                      FROM time_slots ts 
                      JOIN users u ON ts.lecturer_id = u.id 
-                     WHERE ts.status = 'available' 
+                     WHERE LOWER(ts.status) = 'available' 
                      ORDER BY ts.start_time ASC");
 $time_slots = $stmt->fetchAll();
 ?>
