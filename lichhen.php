@@ -17,9 +17,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['cancel_appointment_id
     $cancel_id = (int)$_POST['cancel_appointment_id'];
     
     try {
-        $stmtCancel = $pdo->prepare("UPDATE appointments SET status = 'cancelled' WHERE appointment_id = ? AND student_id = ?");
-        $stmtCancel->execute([$cancel_id, $student_id]);
+        $pdo->beginTransaction();
+
+        // Lấy slot_id tương ứng với cuộc hẹn này trước khi chuyển trạng thái
+        $stmtGetSlot = $pdo->prepare("SELECT slot_id FROM appointments WHERE appointment_id = ? AND student_id = ?");
+        $stmtGetSlot->execute([$cancel_id, $student_id]);
+        $appt = $stmtGetSlot->fetch();
+
+        if ($appt) {
+            // Cập nhật cuộc hẹn thành cancelled
+            $stmtCancel = $pdo->prepare("UPDATE appointments SET status = 'cancelled' WHERE appointment_id = ? AND student_id = ?");
+            $stmtCancel->execute([$cancel_id, $student_id]);
+
+            // Trả khung giờ về trạng thái available để hiển thị lại ở trang timvadatlich
+            $stmtRestoreSlot = $pdo->prepare("UPDATE time_slots SET status = 'available' WHERE slot_id = ?");
+            $stmtRestoreSlot->execute([$appt['slot_id']]);
+        }
+
+        $pdo->commit();
     } catch (PDOException $e) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
         error_log($e->getMessage());
     }
     
@@ -157,7 +176,6 @@ $my_appointments = $stmt->fetchAll();
                             <div style="font-size: 12px; color: #777; margin-top: 4px; display: flex; gap: 15px; align-items: center; flex-wrap: wrap;">
                                 <span><i class="fa-regular fa-clock"></i> <?= date('d/m/Y H:i', strtotime($item['start_time'])) ?> - <?= date('H:i', strtotime($item['end_time'])) ?></span>
                                 
-                                <!-- HIỂN THỊ LOCATION TỰ ĐỘNG -->
                                 <?php if (!empty($item['location'])): ?>
                                     <span style="color: #555;"><i class="fa-solid fa-location-dot" style="color: var(--primary-color);"></i> <?= htmlspecialchars($item['location']) ?></span>
                                 <?php endif; ?>
