@@ -109,23 +109,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     }
 }
 
-// 2. TRUY VẤN DANH SÁCH HỌC VIÊN
-$searchKeyword = isset($_GET['keyword']) ? trim($_GET['keyword']) : '';
-
+// 2. TRUY VẤN TOÀN BỘ DANH SÁCH HỌC VIÊN ĐỂ LỌC TRỰC TIẾP TRÊN GIAO DIỆN
 $sql = "SELECT u.id, u.fullname AS name, u.username, u.email, u.phone,
                sp.student_code, sp.faculty, sp.major, sp.bio
         FROM users u
         LEFT JOIN student_profiles sp ON u.id = sp.user_id
         WHERE u.role = 'student' OR u.role = 'hocvien' OR u.role = 'user'";
 
-if ($searchKeyword !== '') {
-    $sql .= " AND (u.fullname LIKE :kw OR u.username LIKE :kw OR u.email LIKE :kw OR u.phone LIKE :kw OR sp.student_code LIKE :kw)";
-}
-
 $stmt = $pdo->prepare($sql);
-if ($searchKeyword !== '') {
-    $stmt->bindValue(':kw', '%' . $searchKeyword . '%');
-}
 $stmt->execute();
 $students_db = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -275,7 +266,7 @@ foreach ($students_db as $s) {
         <div class="search-bar-container">
             <div class="search-input-form">
                 <i class="fa-solid fa-magnifying-glass"></i>
-                <input type="text" id="searchInput" value="<?= htmlspecialchars($searchKeyword) ?>" placeholder="Tìm tên, username, mã SV...">
+                <input type="text" id="searchInput" placeholder="Tìm tên, username, mã SV...">
             </div>
             
             <button class="btn-add-student" onclick="openAddModal()">
@@ -286,7 +277,7 @@ foreach ($students_db as $s) {
         <div class="student-list" id="studentList">
             <?php if (count($students) > 0): ?>
                 <?php foreach ($students as $s): ?>
-                <div class="student-card">
+                <div class="student-card" data-search-text="<?= htmlspecialchars(mb_strtolower($s['name'] . ' ' . $s['username'] . ' ' . $s['email'] . ' ' . $s['student_code'] . ' ' . $s['phone'], 'UTF-8')) ?>">
                     <div class="student-left">
                         <div class="student-avatar"><?= $s['avatar'] ?></div>
                         <div class="student-info">
@@ -312,9 +303,12 @@ foreach ($students_db as $s) {
                 <?php endforeach; ?>
             <?php else: ?>
                 <div style="text-align: center; padding: 30px; color: var(--primary-color); background: white; border-radius: 15px; border: 1px solid var(--border-color); font-size: 13px;">
-                    Không tìm thấy học viên phù hợp.
+                    Không tìm thấy học viên trong hệ thống.
                 </div>
             <?php endif; ?>
+            <div id="noResultMsg" style="display: none; text-align: center; padding: 30px; color: var(--primary-color); background: white; border-radius: 15px; border: 1px solid var(--border-color); font-size: 13px;">
+                Không tìm thấy học viên phù hợp.
+            </div>
         </div>
     </div>
 
@@ -494,9 +488,25 @@ foreach ($students_db as $s) {
             }
         }
 
-        document.getElementById('searchInput').addEventListener('keyup', function(e) {
-            if (e.key === 'Enter') {
-                window.location.href = 'hv-admin.php?keyword=' + encodeURIComponent(this.value);
+        // Tự động lọc trực tiếp ngay khi gõ từng ký tự không cần bấm Enter và không load lại trang
+        document.getElementById('searchInput').addEventListener('input', function() {
+            const keyword = this.value.toLowerCase().trim();
+            const cards = document.querySelectorAll('.student-card');
+            let visibleCount = 0;
+
+            cards.forEach(card => {
+                const searchText = card.getAttribute('data-search-text') || '';
+                if (searchText.includes(keyword)) {
+                    card.style.display = 'flex';
+                    visibleCount++;
+                } else {
+                    card.style.display = 'none';
+                }
+            });
+
+            const noResultMsg = document.getElementById('noResultMsg');
+            if (noResultMsg) {
+                noResultMsg.style.display = (visibleCount === 0) ? 'block' : 'none';
             }
         });
     </script>
