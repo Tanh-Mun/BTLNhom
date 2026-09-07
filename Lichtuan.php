@@ -4,10 +4,9 @@ require_once 'db.php';
 
 if (!isset($pdo) && isset($conn)) { $pdo = $conn; }
 
-$lecturer_id = $_SESSION['user_id'] ?? 1; // ID giảng viên đăng nhập
-$selected_lecturer = $_SESSION['user_name'] ?? 'Nguyễn Thảo Vy';
+$selected_lecturer = isset($_SESSION['user_name']) ? $_SESSION['user_name'] : 'Nguyễn Thảo Vy';
 
-// 1. Xác định tuần hiện tại (Mặc định lấy tuần này, có thể điều chỉnh qua tham số $_GET['week_offset'])
+// 1. Xác định tuần hiện tại
 $monday_timestamp = strtotime('monday this week');
 if (isset($_GET['week_offset'])) {
     $offset = (int)$_GET['week_offset'];
@@ -21,45 +20,51 @@ $sunday_timestamp = strtotime('sunday', $monday_timestamp);
 $start_date_str = date('Y-m-d 00:00:00', $monday_timestamp);
 $end_date_str = date('Y-m-d 23:59:59', $sunday_timestamp);
 
-// 2. Lấy toàn bộ khung giờ của Giảng viên trong tuần kèm theo số lượng slot đã duyệt
-$sql = "SELECT ts.slot_id, ts.start_time, ts.end_time, 1 AS max_students,
-               COUNT(CASE WHEN a.status = 'approved' THEN 1 END) AS approved_count
+// 2. Truy vấn lấy toàn bộ time_slots trong tuần (tạm thời bỏ qua lọc lecturer_id để kiểm tra dữ liệu)
+$sql = "SELECT 
+            ts.slot_id, 
+            ts.lecturer_id,
+            ts.start_time, 
+            ts.end_time, 
+            a.appointment_id, 
+            a.status
         FROM time_slots ts
         LEFT JOIN appointments a ON ts.slot_id = a.slot_id
-        WHERE ts.lecturer_id = ? AND ts.start_time BETWEEN ? AND ?
-        GROUP BY ts.slot_id, ts.start_time, ts.end_time
+        WHERE ts.start_time BETWEEN ? AND ?
         ORDER BY ts.start_time ASC";
 
 $stmt = $pdo->prepare($sql);
-$stmt->execute([$lecturer_id, $start_date_str, $end_date_str]);
-$raw_slots = $stmt->fetchAll();
+$stmt->execute(array($start_date_str, $end_date_str));
+$raw_slots = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-// 3. Gom nhóm các slot theo 7 ngày trong tuần (Từ T2 đến CN)
-$week_days = [];
-$day_names = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
+// 3. Gom nhóm theo ngày
+$week_days = array();
+$day_names = array('T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN');
 
 for ($i = 0; $i < 7; $i++) {
     $current_day_timestamp = strtotime("+$i days", $monday_timestamp);
     $date_key = date('Y-m-d', $current_day_timestamp);
     $day_label = $day_names[$i] . ', ' . date('d/m', $current_day_timestamp);
 
-    $slots_for_day = [];
+    $slots_for_day = array();
     foreach ($raw_slots as $slot) {
         if (date('Y-m-d', strtotime($slot['start_time'])) === $date_key) {
-            $slots_for_day[] = [
+            $status_lower = strtolower(trim((string)$slot['status']));
+            $is_booked = !empty($slot['appointment_id']) || in_array($status_lower, array('approved', 'completed', 'confirmed', 'đã duyệt', 'da duyet', '1', 'success', 'da co hoc vien dat'));
+            
+            $slots_for_day[] = array(
                 'time' => date('H:i', strtotime($slot['start_time'])) . ' - ' . date('H:i', strtotime($slot['end_time'])),
-                'booked' => $slot['approved_count'] . '/' . $slot['max_students']
-            ];
+                'is_booked' => $is_booked
+            );
         }
     }
 
-    $week_days[] = [
+    $week_days[] = array(
         'day_label' => $day_label,
         'slots' => $slots_for_day
-    ];
+    );
 }
 
-// Lấy chữ cái avatar
 $name_parts = explode(' ', trim($selected_lecturer));
 $avatar_letter = strtoupper(substr(end($name_parts), 0, 1));
 ?>
@@ -80,21 +85,12 @@ $avatar_letter = strtoupper(substr(end($name_parts), 0, 1));
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
         body { background-color: var(--primary-light); color: #333; }
         
-        /* Header */
-        .header { 
-            background-color: var(--primary-color); 
-            color: white; 
-            padding: 15px 40px; 
-            display: flex; 
-            align-items: center; 
-            justify-content: space-between; 
-        }
+        .header { background-color: var(--primary-color); color: white; padding: 15px 40px; display: flex; align-items: center; justify-content: space-between; }
         .header-brand { display: flex; align-items: center; gap: 15px; }
         .logo-box { background: white; color: var(--primary-color); font-weight: bold; padding: 8px 12px; border-radius: 6px; font-size: 14px; }
         .header-text h2 { font-size: 18px; text-transform: uppercase; letter-spacing: 1px; }
         .header-text p { font-size: 13px; opacity: 0.9; }
 
-        /* USER DROPDOWN MENU */
         .user-dropdown { position: relative; display: inline-block; }
         .user-profile-icon { display: flex; align-items: center; gap: 10px; color: white; background-color: rgba(255, 255, 255, 0.15); padding: 6px 16px 6px 6px; border-radius: 25px; border: 1px solid rgba(255, 255, 255, 0.3); cursor: pointer; text-decoration: none; user-select: none; }
         .avatar-circle { width: 34px; height: 34px; background-color: white; color: var(--primary-color); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 15px; }
@@ -105,47 +101,25 @@ $avatar_letter = strtoupper(substr(end($name_parts), 0, 1));
         .dropdown-item:hover { background-color: #fce4ec; }
         .dropdown-item i { font-size: 16px; width: 18px; text-align: center; }
 
-        /* Container & Navigation */
-        .container { max-width: 1000px; margin: 25px auto; padding: 0 20px; }
-        .nav-tabs { 
-            display: inline-flex; background: white; padding: 4px; border-radius: 30px; 
-            border: 1px solid var(--border-color); margin-bottom: 25px; 
-        }
-        .tab-btn { 
-            padding: 8px 18px; border-radius: 20px; border: none; background: transparent; 
-            color: var(--primary-color); font-size: 13px; font-weight: 600; cursor: pointer; 
-            display: flex; align-items: center; gap: 6px; text-decoration: none; 
-        }
+        .container { max-width: 1100px; margin: 25px auto; padding: 0 20px; }
+        .nav-tabs { display: inline-flex; background: white; padding: 4px; border-radius: 30px; border: 1px solid var(--border-color); margin-bottom: 25px; }
+        .tab-btn { padding: 8px 18px; border-radius: 20px; border: none; background: transparent; color: var(--primary-color); font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; text-decoration: none; }
         .tab-btn.active { background: var(--primary-color); color: white; }
 
-        /* Switcher Bar */
         .date-switcher { display: flex; justify-content: center; align-items: center; gap: 12px; margin-bottom: 30px; }
-        .btn-arrow { 
-            background: white; border: 1px solid #f48fb1; color: var(--primary-color); 
-            width: 36px; height: 36px; border-radius: 10px; display: flex; 
-            align-items: center; justify-content: center; text-decoration: none; font-size: 16px; font-weight: bold;
-        }
-        .date-range-btn { 
-            background: white; border: 1px solid #f48fb1; color: var(--primary-color); 
-            padding: 8px 20px; border-radius: 10px; font-weight: bold; font-size: 14px; 
-        }
+        .btn-arrow { background: white; border: 1px solid #f48fb1; color: var(--primary-color); width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; text-decoration: none; font-size: 16px; font-weight: bold; }
+        .date-range-btn { background: white; border: 1px solid #f48fb1; color: var(--primary-color); padding: 8px 20px; border-radius: 10px; font-weight: bold; font-size: 14px; }
 
-        /* Week Grid */
         .week-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 10px; margin-bottom: 40px; }
-        .day-card { 
-            background: white; border: 1px solid #f8bbd0; border-radius: 12px; 
-            padding: 12px 8px; min-height: 280px; display: flex; flex-direction: column; gap: 10px; 
-        }
-        .day-header { color: var(--primary-color); font-weight: bold; font-size: 13px; text-align: left; margin-bottom: 5px; }
-        .slot-item { border: 1px solid #f8bbd0; border-radius: 8px; padding: 8px 4px; text-align: center; background: #fff0f3; }
-        .slot-item .time { color: var(--primary-color); font-weight: bold; font-size: 11px; margin-bottom: 3px; }
-        .slot-item .booked { color: #666; font-size: 11px; font-weight: 600; }
+        .day-card { background: white; border: 1px solid #f8bbd0; border-radius: 12px; padding: 10px 6px; min-height: 280px; display: flex; flex-direction: column; gap: 8px; }
+        .day-header { color: var(--primary-color); font-weight: bold; font-size: 13px; text-align: center; padding-bottom: 6px; border-bottom: 1px dashed #f8bbd0; margin-bottom: 4px; }
+        
+        .slot-card { border: 1px solid #f8bbd0; border-radius: 8px; padding: 8px 6px; background: #fff0f3; text-align: center; font-size: 11px; }
+        .slot-card.booked { background: #fce4ec; border: 1.5px solid var(--primary-color); font-weight: bold; }
+        .slot-time { color: var(--primary-color); margin-bottom: 4px; }
+        .slot-status { color: #d81b60; font-size: 10px; }
 
-        /* Footer */
-        .footer { 
-            background-color: var(--primary-color); color: white; padding: 40px; 
-            margin-top: 50px; display: grid; grid-template-columns: 2fr 1fr 1fr 1.5fr; gap: 30px; 
-        }
+        .footer { background-color: var(--primary-color); color: white; padding: 40px; margin-top: 50px; display: grid; grid-template-columns: 2fr 1fr 1fr 1.5fr; gap: 30px; }
         .footer-logo { display: flex; align-items: center; gap: 10px; margin-bottom: 15px; }
         .footer-logo .logo-box { color: var(--primary-color); }
         .footer p { font-size: 13px; line-height: 1.5; opacity: 0.9; }
@@ -167,8 +141,8 @@ $avatar_letter = strtoupper(substr(end($name_parts), 0, 1));
 
         <div class="user-dropdown">
             <div class="user-profile-icon" id="userMenuBtn">
-                <div class="avatar-circle"><?= htmlspecialchars($avatar_letter) ?></div>
-                <span class="user-name"><?= htmlspecialchars($selected_lecturer) ?></span>
+                <div class="avatar-circle"><?php echo htmlspecialchars($avatar_letter); ?></div>
+                <span class="user-name"><?php echo htmlspecialchars($selected_lecturer); ?></span>
             </div>
             <div class="dropdown-menu" id="userDropdown">
                 <a href="Hoso.php" class="dropdown-item"><i class="fa-regular fa-id-card"></i> Xem hồ sơ</a>
@@ -183,28 +157,31 @@ $avatar_letter = strtoupper(substr(end($name_parts), 0, 1));
             <a href="Khunggio.php" class="tab-btn"><i class="fa-regular fa-clock"></i> Khung giờ</a>
             <a href="DanhSachCho.php" class="tab-btn"><i class="fa-solid fa-users"></i> Danh sách chờ</a>
             <a href="Lichtuan.php" class="tab-btn active"><i class="fa-solid fa-calendar-days"></i> Lịch tuần</a>
-            
         </div>
 
         <div class="date-switcher">
-            <a href="Lichtuan.php?week_offset=<?= $offset - 1 ?>" class="btn-arrow">&lt;</a>
+            <a href="Lichtuan.php?week_offset=<?php echo $offset - 1; ?>" class="btn-arrow">&lt;</a>
             <div class="date-range-btn">
-                T2, <?= date('d/m', $monday_timestamp) ?> - CN, <?= date('d/m', $sunday_timestamp) ?> 📅
+                T2, <?php echo date('d/m', $monday_timestamp); ?> - CN, <?php echo date('d/m', $sunday_timestamp); ?> 📅
             </div>
-            <a href="Lichtuan.php?week_offset=<?= $offset + 1 ?>" class="btn-arrow">&gt;</a>
+            <a href="Lichtuan.php?week_offset=<?php echo $offset + 1; ?>" class="btn-arrow">&gt;</a>
         </div>
 
         <div class="week-grid">
             <?php foreach ($week_days as $day): ?>
                 <div class="day-card">
-                    <div class="day-header"><?= htmlspecialchars($day['day_label']) ?></div>
+                    <div class="day-header"><?php echo htmlspecialchars($day['day_label']); ?></div>
                     <?php if (empty($day['slots'])): ?>
                         <div style="font-size: 11px; color: #aaa; text-align: center; margin-top: 15px;">Trống</div>
                     <?php else: ?>
                         <?php foreach ($day['slots'] as $slot): ?>
-                            <div class="slot-item">
-                                <div class="time"><?= htmlspecialchars($slot['time']) ?></div>
-                                <div class="booked"><?= htmlspecialchars($slot['booked']) ?></div>
+                            <div class="slot-card <?php echo $slot['is_booked'] ? 'booked' : ''; ?>">
+                                <div class="slot-time">
+                                    <i class="fa-regular fa-clock"></i> <?php echo htmlspecialchars($slot['time']); ?>
+                                </div>
+                                <div class="slot-status">
+                                    <?php echo $slot['is_booked'] ? 'Đã có học viên đặt' : 'Đang mở'; ?>
+                                </div>
                             </div>
                         <?php endforeach; ?>
                     <?php endif; ?>
