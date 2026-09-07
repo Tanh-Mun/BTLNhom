@@ -4,39 +4,42 @@ require_once 'db.php';
 
 if (!isset($pdo) && isset($conn)) { $pdo = $conn; }
 
+// Lấy thông tin giảng viên đang đăng nhập
+$selected_lecturer = $_SESSION['user_name'] ?? 'Nguyễn Thảo Vy';
 $lecturer_id = $_SESSION['user_id'] ?? 1;
 
+// Xử lý Duyệt hoặc Từ chối lịch hẹn
 if (isset($_GET['action']) && isset($_GET['appointment_id'])) {
     $appointment_id = (int)$_GET['appointment_id'];
     $action = $_GET['action'];
 
     if ($action === 'approve') {
+        // Cập nhật trạng thái cuộc hẹn thành 'approved'
         $stmt = $pdo->prepare("UPDATE appointments SET status = 'approved' WHERE appointment_id = ?");
         $stmt->execute([$appointment_id]);
 
-        $stmt_slot = $pdo->prepare("UPDATE time_slots SET status = 'full' WHERE slot_id = (SELECT slot_id FROM appointments WHERE appointment_id = ?)");
-        $stmt_slot->execute([$appointment_id]);
-
     } elseif ($action === 'reject') {
-        $stmt = $pdo->prepare("UPDATE appointments SET status = 'rejected' WHERE appointment_id = ?");
+        // Xóa hoặc hủy bản ghi cuộc hẹn
+        $stmt = $pdo->prepare("DELETE FROM appointments WHERE appointment_id = ?");
         $stmt->execute([$appointment_id]);
     }
 
-    header('Location: DanhSachCho.php');
+    header('Location: Danhsachcho.php');
     exit;
 }
 
-// Truy vấn lấy thông tin cuộc hẹn
-$stmt = $pdo->prepare("SELECT a.appointment_id, u.fullname AS student_name, u.email, ts.topic, ts.start_time, ts.end_time, ts.location 
+// Truy vấn lấy danh sách chờ (SELECT ts.* để lấy tất cả các cột của time_slots, tránh lỗi lệch tên cột)
+$stmt = $pdo->prepare("SELECT 
+                            a.appointment_id, 
+                            a.created_at,
+                            ts.* 
                        FROM appointments a 
                        JOIN time_slots ts ON a.slot_id = ts.slot_id 
-                       JOIN users u ON a.student_id = u.id 
-                       WHERE ts.lecturer_id = ? AND LOWER(a.status) = 'pending'
+                       WHERE LOWER(a.status) = 'pending'
                        ORDER BY a.created_at ASC");
-$stmt->execute([$lecturer_id]);
-$waiting_list = $stmt->fetchAll();
+$stmt->execute();
+$waiting_list = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-$selected_lecturer = $_SESSION['user_name'] ?? 'Nguyễn Thảo Vy';
 $name_parts = explode(' ', trim($selected_lecturer));
 $avatar_letter = strtoupper(substr(end($name_parts), 0, 1));
 ?>
@@ -84,8 +87,6 @@ $avatar_letter = strtoupper(substr(end($name_parts), 0, 1));
         /* LIST CARD */
         .waiting-card { background: white; border: 1px solid var(--border-color); border-radius: 12px; padding: 20px 24px; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center; }
         .waiting-card h4 { color: #c2185b; font-size: 18px; font-weight: bold; }
-        .waiting-card h4 span { color: #888; font-weight: normal; font-size: 14px; }
-        .topic { color: #f48fb1; font-weight: 500; font-size: 14px; margin: 4px 0; }
         .time { color: #888; font-size: 13px; }
         
         .info-row { display: flex; gap: 15px; align-items: center; flex-wrap: wrap; margin-top: 6px; font-size: 13px; color: #555; }
@@ -134,7 +135,7 @@ $avatar_letter = strtoupper(substr(end($name_parts), 0, 1));
         <div class="nav-tabs">
             <a href="Cuochen.php" class="tab-btn"><i class="fa-regular fa-calendar-check"></i> Cuộc hẹn</a>
             <a href="Khunggio.php" class="tab-btn"><i class="fa-regular fa-clock"></i> Khung giờ</a>
-            <a href="DanhSachCho.php" class="tab-btn active"><i class="fa-solid fa-users"></i> Danh sách chờ</a>
+            <a href="Danhsachcho.php" class="tab-btn active"><i class="fa-solid fa-users"></i> Danh sách chờ</a>
             <a href="Lichtuan.php" class="tab-btn"><i class="fa-regular fa-calendar-days"></i> Lịch tuần</a>
         </div>
 
@@ -143,27 +144,36 @@ $avatar_letter = strtoupper(substr(end($name_parts), 0, 1));
                 Không có yêu cầu nào đang chờ duyệt.
             </div>
         <?php else: ?>
-            <?php foreach ($waiting_list as $item): ?>
+            <?php foreach ($waiting_list as $item): 
+                // Tự động nhận diện tên cột hiển thị tiêu đề và địa điểm
+                $topic_name = $item['title'] ?? $item['topic'] ?? $item['subject'] ?? 'Yêu cầu đặt lịch tư vấn';
+                $location = $item['location'] ?? $item['link'] ?? $item['room'] ?? '';
+                $start_time = isset($item['start_time']) ? date('d/m/Y H:i', strtotime($item['start_time'])) : '';
+                $end_time = isset($item['end_time']) ? date('H:i', strtotime($item['end_time'])) : '';
+            ?>
                 <div class="waiting-card">
                     <div>
-                        <h4><?= htmlspecialchars($item['student_name']) ?> <span>(<?= htmlspecialchars($item['email']) ?>)</span></h4>
-                        <div class="topic"><?= htmlspecialchars($item['topic']) ?></div>
+                        <h4>Chủ đề: <?= htmlspecialchars($topic_name) ?></h4>
                         
                         <div class="info-row">
-                            <span class="time"><i class="fa-regular fa-clock"></i> <?= date('d/m/Y H:i', strtotime($item['start_time'])) ?> - <?= date('H:i', strtotime($item['end_time'])) ?></span>
+                            <?php if ($start_time): ?>
+                                <span class="time">
+                                    <i class="fa-regular fa-clock"></i> 
+                                    <?= $start_time ?> - <?= $end_time ?>
+                                </span>
+                            <?php endif; ?>
                             
-                            <!-- CHỈ HIỂN THỊ ĐỊA ĐIỂM HOẶC PHÒNG HỌP -->
-                            <?php if (!empty($item['location'])): ?>
+                            <?php if (!empty($location)): ?>
                                 <span>
                                     <i class="fa-solid fa-location-dot" style="color: var(--primary-color);"></i> 
-                                    <?= htmlspecialchars($item['location']) ?>
+                                    <?= htmlspecialchars($location) ?>
                                 </span>
                             <?php endif; ?>
                         </div>
                     </div>
                     <div style="display: flex; gap: 10px;">
-                        <a href="DanhSachCho.php?action=approve&appointment_id=<?= $item['appointment_id'] ?>" class="btn-approve">✓ Duyệt</a>
-                        <a href="DanhSachCho.php?action=reject&appointment_id=<?= $item['appointment_id'] ?>" class="btn-reject">✕ Từ chối</a>
+                        <a href="Danhsachcho.php?action=approve&appointment_id=<?= $item['appointment_id'] ?>" class="btn-approve">✓ Duyệt</a>
+                        <a href="Danhsachcho.php?action=reject&appointment_id=<?= $item['appointment_id'] ?>" class="btn-reject">✕ Từ chối</a>
                     </div>
                 </div>
             <?php endforeach; ?>
