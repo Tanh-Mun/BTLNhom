@@ -19,16 +19,37 @@ if (isset($_GET['action']) && isset($_GET['appointment_id'])) {
         $stmt->execute([$appointment_id]);
 
     } elseif ($action === 'reject') {
-        // Xóa hoặc hủy bản ghi cuộc hẹn
-        $stmt = $pdo->prepare("DELETE FROM appointments WHERE appointment_id = ?");
-        $stmt->execute([$appointment_id]);
+        try {
+            $pdo->beginTransaction();
+
+            // Lấy slot_id trước khi từ chối để mở lại khung giờ
+            $stmtGet = $pdo->prepare("SELECT slot_id FROM appointments WHERE appointment_id = ?");
+            $stmtGet->execute([$appointment_id]);
+            $appt = $stmtGet->fetch();
+
+            // Cập nhật trạng thái cuộc hẹn thành 'rejected' thay vì xóa
+            $stmt = $pdo->prepare("UPDATE appointments SET status = 'rejected' WHERE appointment_id = ?");
+            $stmt->execute([$appointment_id]);
+
+            // Trả khung giờ về available
+            if ($appt) {
+                $stmtSlot = $pdo->prepare("UPDATE time_slots SET status = 'available' WHERE slot_id = ?");
+                $stmtSlot->execute([$appt['slot_id']]);
+            }
+
+            $pdo->commit();
+        } catch (Exception $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+        }
     }
 
     header('Location: Danhsachcho.php');
     exit;
 }
 
-// Truy vấn lấy danh sách chờ (SELECT ts.* để lấy tất cả các cột của time_slots, tránh lỗi lệch tên cột)
+// Truy vấn lấy danh sách chờ
 $stmt = $pdo->prepare("SELECT 
                             a.appointment_id, 
                             a.created_at,
@@ -145,7 +166,6 @@ $avatar_letter = strtoupper(substr(end($name_parts), 0, 1));
             </div>
         <?php else: ?>
             <?php foreach ($waiting_list as $item): 
-                // Tự động nhận diện tên cột hiển thị tiêu đề và địa điểm
                 $topic_name = $item['title'] ?? $item['topic'] ?? $item['subject'] ?? 'Yêu cầu đặt lịch tư vấn';
                 $location = $item['location'] ?? $item['link'] ?? $item['room'] ?? '';
                 $start_time = isset($item['start_time']) ? date('d/m/Y H:i', strtotime($item['start_time'])) : '';
@@ -173,7 +193,7 @@ $avatar_letter = strtoupper(substr(end($name_parts), 0, 1));
                     </div>
                     <div style="display: flex; gap: 10px;">
                         <a href="Danhsachcho.php?action=approve&appointment_id=<?= $item['appointment_id'] ?>" class="btn-approve">✓ Duyệt</a>
-                        <a href="Danhsachcho.php?action=reject&appointment_id=<?= $item['appointment_id'] ?>" class="btn-reject">✕ Từ chối</a>
+                        <a href="Danhsachcho.php?action=reject&appointment_id=<?= $item['appointment_id'] ?>" class="btn-reject" onclick="return confirm('Bạn có chắc chắn muốn từ chối yêu cầu này?');">✕ Từ chối</a>
                     </div>
                 </div>
             <?php endforeach; ?>

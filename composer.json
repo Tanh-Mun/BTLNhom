@@ -1,0 +1,9 @@
+{
+    "name": "edulingo/app",
+    "description": "Hệ thống EDULINGO MVC",
+    "autoload": {
+        "psr-4": {
+            "App\\": "src/"
+        }
+    }
+}

@@ -19,17 +19,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['cancel_appointment_id
     try {
         $pdo->beginTransaction();
 
-        // Lấy slot_id tương ứng với cuộc hẹn này trước khi chuyển trạng thái
         $stmtGetSlot = $pdo->prepare("SELECT slot_id FROM appointments WHERE appointment_id = ? AND student_id = ?");
         $stmtGetSlot->execute([$cancel_id, $student_id]);
         $appt = $stmtGetSlot->fetch();
 
         if ($appt) {
-            // Cập nhật cuộc hẹn thành cancelled
             $stmtCancel = $pdo->prepare("UPDATE appointments SET status = 'cancelled' WHERE appointment_id = ? AND student_id = ?");
             $stmtCancel->execute([$cancel_id, $student_id]);
 
-            // Trả khung giờ về trạng thái available để hiển thị lại ở trang timvadatlich
             $stmtRestoreSlot = $pdo->prepare("UPDATE time_slots SET status = 'available' WHERE slot_id = ?");
             $stmtRestoreSlot->execute([$appt['slot_id']]);
         }
@@ -53,12 +50,11 @@ $currentUser = $stmtUser->fetch();
 
 $student_name = !empty($currentUser['fullname']) ? trim($currentUser['fullname']) : ($_SESSION['user_name'] ?? 'Học viên');
 
-// Tách chữ cái đầu tiên của TÊN
 $name_parts = explode(' ', $student_name);
 $first_name = end($name_parts);
 $avatar_letter = mb_strtoupper(mb_substr($first_name, 0, 1, 'UTF-8'), 'UTF-8');
 
-// Truy vấn danh sách cuộc hẹn (Lấy thêm ts.type và ts.location)
+// Truy vấn danh sách cuộc hẹn
 $sql = "SELECT a.appointment_id, LOWER(a.status) AS status, ts.topic, ts.start_time, ts.end_time, ts.type, ts.location, 
                u.fullname AS lecturer_name
         FROM appointments a

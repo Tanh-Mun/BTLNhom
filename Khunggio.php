@@ -39,8 +39,12 @@ if (isset($_GET['delete_slot_id'])) {
     exit;
 }
 
-// Lấy danh sách khung giờ
-$stmt = $pdo->prepare("SELECT * FROM time_slots WHERE lecturer_id = ? ORDER BY start_time ASC");
+// Lấy danh sách khung giờ kèm trạng thái cuộc hẹn mới nhất để phản ánh chính xác việc từ chối/hủy
+$stmt = $pdo->prepare("SELECT ts.*, 
+                              (SELECT a.status FROM appointments a WHERE a.slot_id = ts.slot_id ORDER BY a.appointment_id DESC LIMIT 1) AS latest_appointment_status
+                       FROM time_slots ts 
+                       WHERE ts.lecturer_id = ? 
+                       ORDER BY ts.start_time ASC");
 $stmt->execute([$lecturer_id]);
 $time_slots = $stmt->fetchAll();
 
@@ -159,7 +163,7 @@ $avatar_letter = mb_strtoupper(mb_substr($first_name, 0, 1, 'UTF-8'), 'UTF-8');
         <div class="nav-tabs">
             <a href="Cuochen.php" class="tab-btn"><i class="fa-regular fa-calendar-check"></i> Cuộc hẹn</a>
             <a href="Khunggio.php" class="tab-btn active"><i class="fa-regular fa-clock"></i> Khung giờ</a>
-            <a href="DanhSachCho.php" class="tab-btn"><i class="fa-solid fa-users"></i> Danh sách chờ</a>
+            <a href="Danhsachcho.php" class="tab-btn"><i class="fa-solid fa-users"></i> Danh sách chờ</a>
             <a href="Lichtuan.php" class="tab-btn"><i class="fa-regular fa-calendar-days"></i> Lịch tuần</a>
         </div>
 
@@ -210,7 +214,10 @@ $avatar_letter = mb_strtoupper(mb_substr($first_name, 0, 1, 'UTF-8'), 'UTF-8');
         <?php if (empty($time_slots)): ?>
             <div style="background: white; padding: 25px; border-radius: 12px; text-align: center; color: #777; border: 1px solid var(--border-color);">Chưa có khung giờ nào được mở.</div>
         <?php else: ?>
-            <?php foreach ($time_slots as $slot): ?>
+            <?php foreach ($time_slots as $slot): 
+                $app_status = strtolower($slot['latest_appointment_status'] ?? '');
+                $is_booked = ($slot['status'] === 'booked' || $app_status === 'pending' || $app_status === 'approved');
+            ?>
                 <div class="slot-card">
                     <div>
                         <h4><?= htmlspecialchars($slot['topic']) ?></h4>
@@ -220,7 +227,7 @@ $avatar_letter = mb_strtoupper(mb_substr($first_name, 0, 1, 'UTF-8'), 'UTF-8');
                         </div>
                     </div>
                     <div style="display: flex; align-items: center; gap: 15px;">
-                        <?php if ($slot['status'] === 'available'): ?>
+                        <?php if (!$is_booked || $app_status === 'rejected' || $app_status === 'cancelled'): ?>
                             <span class="badge badge-available">Đang mở</span>
                         <?php else: ?>
                             <span class="badge badge-booked">Đã có học viên đặt</span>
